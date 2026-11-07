@@ -2497,6 +2497,42 @@ function PriceChartSheet({ h, mine, own, onClose }) {
   );
 }
 
+// What "When ads run" counts, in plain words, plus the terms the hour card uses.
+function HeatHelp({ market, category, media }) {
+  const inMkt = (s) => market === 'All' || s.market === market;
+  const radio = STATIONS.filter((s) => s.media === 'Radio' && inMkt(s)).length;
+  const tvN = STATIONS.filter((s) => s.media === 'TV' && inMkt(s)).length;
+  const where = market === 'All' ? 'every market' : market;
+  const stations = media === 'Radio' ? `${radio} radio stations`
+    : media === 'TV' ? `${tvN} TV stations`
+      : `${radio} radio and ${tvN} TV stations`;
+  const what = category === 'All' ? <><b>All ads</b>, every category,</> : <>Only <b>{category}</b> ads</>;
+  const tvParts = media === 'TV';
+  return (
+    <div className="ri-heat-help">
+      <p>{what} on the <b>{stations}</b> in {where}, added up for each hour of the last 7 days. Each square is one hour of the week; darker means more ads. Tap a square for that hour's cost, how crowded it is and a better-value slot.</p>
+      <p className="muted small">{category === 'All' ? 'Pick a category in the filters to see only your kind of business.' : 'Set Category to All to see every ad.'} Radio/TV switches which stations are counted.</p>
+      <details className="ri-defs">
+        <summary>What the terms mean</summary>
+        <dl>
+          <div><dt>Spot</dt><dd>One airing of one ad. The same ad played 10 times is 10 spots.</dd></div>
+          <div><dt>Spots per hour</dt><dd>All spots in that hour, added across every station counted above.</dd></div>
+          <div><dt>Daypart</dt><dd>{tvParts
+            ? 'The blocks TV stations sell by: Early Morning 5–9 AM, Daytime 9 AM–4 PM, Early News 4–7 PM, Prime Access 7–8 PM, Prime 8–11 PM, Late News 11 PM–midnight, Late Night midnight–5 AM.'
+            : 'The blocks radio stations sell by: AM Drive 6–10 AM, Midday 10 AM–3 PM, PM Drive 3–7 PM, Evening 7 PM–midnight, Overnight midnight–6 AM.'} Rates are set by daypart, so every hour in a daypart costs about the same.</dd></div>
+          <div><dt>Typical hour</dt><dd>The average hour of the week for what's shown here. "1.9× a typical hour" means almost twice the usual number of ads.</dd></div>
+          <div><dt>Ads per station per hour</dt><dd>How crowded a station's breaks are. More ads means yours has more to compete with. Light is under 6, normal 6–10, crowded 10 or more.</dd></div>
+          <div><dt>Cost per :30</dt><dd>The estimated price of one 30-second spot at that daypart, on an average station and on the most expensive one.</dd></div>
+          <div><dt>Better value</dt><dd>The same hour on a similar day (weekday with weekday, weekend with weekend) with fewer ads. The audience and rate are about the same, but your ad stands out more.</dd></div>
+          <div><dt>Leans in / quiet</dt><dd>Whether your category runs heavier or lighter at that hour than the market overall. Leaning in means your rivals are loudest then.</dd></div>
+          <div><dt>Heard today</dt><dd>Advertisers we actually picked up in that daypart today, from the live feed.</dd></div>
+        </dl>
+        <p className="muted small">Weekly volume and rates are demo estimates until real recordings fill in.</p>
+      </details>
+    </div>
+  );
+}
+
 // Tap an hour on "When ads run": what it costs, how crowded it is, who you're up against, and a better-value slot.
 const DP_NOTE = {
   'AM Drive': 'Commute in. The biggest radio audience of the day, priced to match.',
@@ -2661,6 +2697,7 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
         <h2>When ads run{media !== 'Both' ? ` on ${media}` : ''}</h2>
         <span className="ri-count">spots per hour · last 7 days</span>
       </div>
+      <HeatHelp market={market} category={category} media={media} />
       <div className="ri-panel">
         {cell
           ? <HourDetail cell={cell} grid={grid} market={market} category={category} media={media} me={me} events={events} onClose={() => setCell(null)} />
