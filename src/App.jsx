@@ -2549,7 +2549,7 @@ const DP_NOTE = {
   'Late Night': 'Late-night talk. A small, cheap audience.',
 };
 
-function HourDetail({ cell, grid, market, category, media, me, events, onClose }) {
+function HourDetail({ cell, isPeak, grid, market, category, media, me, events, onClose }) {
   const { d, h } = cell;
   const v = grid[d][h];
   const tv = media === 'TV';
@@ -2629,8 +2629,8 @@ function HourDetail({ cell, grid, market, category, media, me, events, onClose }
   return (
     <section className="ri-insights ri-hour" aria-label={`${DAYS[d]} ${hourLabel(h)} details`}>
       <div className="ri-hour-head">
-        <span><b>{DAYS[d]} {hourLabel(h)}</b> · {v.toLocaleString('en-US')} spots{category !== 'All' ? ` in ${category}` : ''}</span>
-        <button type="button" className="ri-chip" onClick={onClose}>Close</button>
+        <span>{isPeak && <span className="ri-eyebrow">Busiest hour</span>}<b>{DAYS[d]} {hourLabel(h)}</b> · {v.toLocaleString('en-US')} spots{category !== 'All' ? ` in ${category}` : ''}</span>
+        {onClose && <button type="button" className="ri-chip" onClick={onClose}>Back to busiest</button>}
       </div>
       <p className="ri-hour-note">{DP_NOTE[dp.name]}</p>
       <ul>
@@ -2654,6 +2654,9 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
   let peak = { d: 0, h: 0, v: 0 };
   grid.forEach((row, d) => row.forEach((v, h) => { if (v > peak.v) peak = { d, h, v }; }));
   const level = (v) => Math.min(4, Math.floor((v / (max || 1)) * 5));
+  // The hour shown in the details: the one pointed at or tapped, otherwise the busiest.
+  const shown = cell && grid[cell.d] ? cell : { d: peak.d, h: peak.h };
+  const sideRef = useRef(null);
 
   const sov = useMemo(() => {
     const by = new Map();
@@ -2698,10 +2701,10 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
         <span className="ri-count">spots per hour · last 7 days</span>
       </div>
       <HeatHelp market={market} category={category} media={media} />
-      <div className="ri-panel">
-        {cell
-          ? <HourDetail cell={cell} grid={grid} market={market} category={category} media={media} me={me} events={events} onClose={() => setCell(null)} />
-          : <p className="ri-callout">Busiest hour: <b>{DAYS[peak.d]} {hourLabel(peak.h)}</b>, {peak.v.toLocaleString('en-US')} spots. Tap any square to see what that hour costs, how crowded it is and a better-value slot.</p>}
+      {/* The details sit beside the grid on a computer and below it on a phone, so the grid never jumps. */}
+      <div className="ri-panel ri-heat-wrap">
+        <div className="ri-heat-main">
+        <p className="ri-callout">Busiest hour: <b>{DAYS[peak.d]} {hourLabel(peak.h)}</b>, {peak.v.toLocaleString('en-US')} spots. <span className="hover-hint">Point at any square to see its details.</span><span className="tap-hint">Tap any square; its details show below.</span></p>
         <div className="ri-heat-scroll">
           <div className="ri-heat" role="grid" aria-label="Ad volume by day and hour">
             <span />
@@ -2710,14 +2713,25 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
               <React.Fragment key={d}>
                 <span className="dd">{DAYS[d]}</span>
                 {row.map((v, h) => (
-                  <button key={h} type="button" className={`c l${level(v)} ${cell && cell.d === d && cell.h === h ? 'sel' : ''}`}
-                    onClick={() => setCell({ d, h })} aria-label={`${DAYS[d]} ${hourLabel(h)}: ${v} spots`} />
+                  <button key={h} type="button" className={`c l${level(v)} ${shown.d === d && shown.h === h ? 'sel' : ''}`}
+                    onPointerEnter={(e) => { if (e.pointerType === 'mouse') setCell({ d, h }); }}
+                    onFocus={() => setCell({ d, h })}
+                    onClick={(e) => {
+                      setCell({ d, h });
+                      // Touch: bring the details into view only if they're off screen, without moving the grid first.
+                      if (e.nativeEvent.pointerType !== 'mouse') setTimeout(() => sideRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 0);
+                    }}
+                    aria-label={`${DAYS[d]} ${hourLabel(h)}: ${v} spots`} />
                 ))}
               </React.Fragment>
             ))}
           </div>
         </div>
         <div className="ri-legend"><span>Fewer</span>{[0, 1, 2, 3, 4].map((l) => <i key={l} className={`c l${l}`} />)}<span>More</span></div>
+        </div>
+        <div className="ri-heat-side" ref={sideRef} aria-live="polite">
+          <HourDetail cell={shown} isPeak={!cell} grid={grid} market={market} category={category} media={media} me={me} events={events} onClose={cell ? () => setCell(null) : null} />
+        </div>
       </div>
 
       <div className="ri-section-head"><h2>Price moves</h2><span className="ri-count">8 weeks, {WEEKS[0]} to {WEEKS[WEEKS.length - 1]}</span></div>

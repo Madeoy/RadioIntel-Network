@@ -931,3 +931,18 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-defs dl { margin: 10px 0 6px; display: flex; flex-direction: column; gap: 8px; }
 .ri-defs dt { font-weight: 700; font-size: 0.85rem; }
 .ri-defs dd { margin: 1px 0 0; color: var(--muted); font-size: 0.82rem; }
+
+/* "When ads run": details beside the grid on a computer, below it on a phone, so the grid never moves */
+.ri-heat-wrap { display: flex; flex-direction: column; gap: 12px; }
+.ri-heat-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.ri-heat-side .ri-hour { margin: 0; }
+.ri-hour-head .ri-eyebrow { display: block; margin-bottom: 2px; }
+.ri-callout .hover-hint { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .ri-callout .hover-hint { display: inline; }
+  .ri-callout .tap-hint { display: none; }
+}
+@media (min-width: 1100px) {
+  .ri-heat-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 360px; align-items: start; gap: 18px; }
+  .ri-heat-side { position: sticky; top: 12px; }
+}
