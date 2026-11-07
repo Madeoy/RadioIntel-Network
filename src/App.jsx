@@ -3,7 +3,7 @@ import './App.css';
 import {
   HOME_MARKET, MARKETS, STATIONS, TV_STATIONS, CATEGORIES, DAYPARTS, TV_DAYPARTS, OFFER_CHANGES, PRICE_HISTORY, WEEKS, DAYS, EXPORT_COLUMNS,
   CREATIVES, MARKET_MOVES, CITIES_BY_MARKET, cityOf,
-  seedDetections, makeDetection, heatGrid, daypartFor, tvDaypartFor, weekOverWeek, toTSV, toCSV,
+  seedDetections, makeDetection, heatGrid, airingHistory, CHECK_MAX_DAYS, daypartFor, tvDaypartFor, weekOverWeek, toTSV, toCSV,
 } from './data.js';
 import { WEB_CAPTURED, WEB_SITES, WEB_OFFERS } from './webdeals.js';
 import { ROSTER } from './roster.js';
@@ -214,6 +214,9 @@ export default function App() {
   // The client's own company. Every "vs you" comparison in the app is against it.
   const [me, setMe] = useState(() => store('ri.me.v1', 'Puget Sound Toyota'));
   const [toast, setToast] = useState(null);
+  // Station to open in Stations > On air now (set from the Live tab or a stream row).
+  const [onAir, setOnAir] = useState(null);
+  const openStation = (id) => { setOnAir(id || 'pick'); setTab('stations'); window.scrollTo({ top: 0 }); };
   const watchRef = useRef(watchlist);
   const alertsRef = useRef(alertsOn);
   const beatRef = useRef(beatAlerts);
@@ -349,7 +352,7 @@ export default function App() {
       <main className="ri-main">
         {tab === 'live' && (
           <LiveView events={filtered} allCount={events.length} now={now} onOpen={setSelected}
-            watchlist={watchlist} toggleWatch={toggleWatch} goTo={setTab} me={me} setMe={setMe} {...filterProps} />
+            watchlist={watchlist} toggleWatch={toggleWatch} goTo={setTab} me={me} setMe={setMe} openStation={openStation} {...filterProps} />
         )}
         {tab === 'offers' && <OffersView events={filtered} onAdvertiser={showAdvertiser} me={me} {...filterProps} />}
         {tab === 'trends' && (
@@ -357,7 +360,8 @@ export default function App() {
         )}
         {tab === 'web' && <WebDealsView me={me} chooseMe={chooseMe} />}
         {tab === 'mix' && <MixView crossMedia={crossMedia} market={market} category={category} me={me} setMe={setMe} onAdvertiser={showAdvertiser} />}
-        {tab === 'stations' && <StationsView events={events} now={now} onAdvertiser={showAdvertiser} onOpen={setSelected} />}
+        {tab === 'stations' && <StationsView events={events} now={now} onAdvertiser={showAdvertiser} onOpen={setSelected} onAir={onAir} clearOnAir={() => setOnAir(null)} />}
+        {tab === 'check' && <CheckView events={events} now={now} me={me} onOpen={setSelected} notify={notify} />}
         {tab === 'export' && (
           <ExportView rows={filtered} market={market} city={city} category={category} query={query} media={media}
             watchlist={watchlist} toggleWatch={toggleWatch} alertsOn={alertsOn} setAlertsOn={setAlertsOn}
@@ -528,6 +532,7 @@ const NAV = [
   ['trends', 'Trends', 'M3 3v18h18M7 15l4-4 3 3 6-7'],
   ['mix', 'Media', 'M4 5h16v11H4zM8 20h8M12 16v4'],
   ['stations', 'Stations', 'M5 9a10 10 0 0 1 14 0M8 12a6 6 0 0 1 8 0M12 15v6M9 21h6'],
+  ['check', 'Ad Check', 'M9 12l2 2 4-4M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18'],
   ['export', 'Export', 'M12 3v12M7 10l5 5 5-5M4 21h16'],
 ];
 
@@ -978,7 +983,7 @@ function WhatChanged({ me, watchlist, events, onOpen }) {
   );
 }
 
-function LiveView({ events, allCount, now, onOpen, watchlist, toggleWatch, goTo, me, setMe, ...filters }) {
+function LiveView({ events, allCount, now, onOpen, watchlist, toggleWatch, goTo, me, setMe, openStation, ...filters }) {
   const [limit, setLimit] = useState(FEED_PAGE);
   const [view, setView] = useState('all');
   const shown = view === 'watching' ? events.filter((d) => watchlist.includes(d.creative.advertiser)) : events;
@@ -1006,7 +1011,8 @@ function LiveView({ events, allCount, now, onOpen, watchlist, toggleWatch, goTo,
       {view === 'all' && (
         <p className="ri-feed-explain">
           Every ad the moment it airs, newest on top. Tap one for the full offer.{' '}
-          <button type="button" className="ri-link" onClick={() => { goTo('export'); window.scrollTo({ top: 0 }); }}>Send to Google Sheets →</button>
+          <button type="button" className="ri-link" onClick={() => { goTo('export'); window.scrollTo({ top: 0 }); }}>Send to Google Sheets →</button>{' '}
+          <button type="button" className="ri-link" onClick={() => openStation()}>Watch one station live →</button>
         </p>
       )}
       {shown.length === 0 && <p className="ri-empty">No spots match these filters. Clear the search or loosen a filter.</p>}
@@ -2500,7 +2506,7 @@ function PriceChartSheet({ h, mine, own, onClose }) {
 // What "When ads run" counts, in plain words, plus the terms the hour card uses.
 function HeatHelp({ market, category, media, grid, onPick }) {
   const inMkt = (s) => market === 'All' || s.market === market;
-  const radio = STATIONS.filter((s) => s.media === 'Radio' && inMkt(s)).length;
+  const radio = STATIONS.filter((s) => s.media === 'Radio' && !s.nc && inMkt(s)).length;
   const tvN = STATIONS.filter((s) => s.media === 'TV' && inMkt(s)).length;
   const where = market === 'All' ? 'every market' : market;
   const stations = media === 'Radio' ? `${radio} radio stations`
@@ -2592,7 +2598,7 @@ function HourDetail({ cell, isPeak, grid, market, category, media, me, events, o
   const where = market === 'All' ? 'all markets' : market;
 
   // Crowding: estimated ads per station in that hour.
-  const sts = STATIONS.filter((st) => (tv ? st.media === 'TV' : st.media === 'Radio') && (market === 'All' || st.market === market));
+  const sts = STATIONS.filter((st) => !st.nc && (tv ? st.media === 'TV' : st.media === 'Radio') && (market === 'All' || st.market === market));
   const wsum = sts.reduce((a, st) => a + st.weight, 0) || 1;
   const perSt = v / wsum;
   const crowd = perSt >= 10 ? 'crowded' : perSt >= 6 ? 'normal' : 'light';
@@ -2874,7 +2880,7 @@ function HeadToHead({ events, home, hours, onAdvertiser }) {
     return m;
   }, [events, home]);
   const empty = { spots: 0, secs: 0, spend: 0, advs: new Set() };
-  const peers = STATIONS.filter((s) => s.market === home.market && s.media === home.media);
+  const peers = STATIONS.filter((s) => s.market === home.market && s.media === home.media && !s.nc);
   const ranked = [...peers].sort((a, b) => (stats.get(b.id) || empty).spend - (stats.get(a.id) || empty).spend);
   const rivals = ranked.filter((s) => s.id !== home.id);
   const rival = rivals.find((s) => s.id === rivalId) || rivals[0];
@@ -3013,10 +3019,13 @@ function MyStation({ events, home, hours, now, peers, rank, onAdvertiser, onOpen
   );
 }
 
-function StationsView({ events, now, onAdvertiser, onOpen }) {
+function StationsView({ events, now, onAdvertiser, onOpen, onAir, clearOnAir }) {
   const [home, setHome] = useState(() => store('ri.home', 'KISW'));
-  const [view, setView] = useState('mine');
+  const [view, setView] = useState(onAir ? 'live' : 'mine');
+  const [liveId, setLiveId] = useState(() => (onAir && onAir !== 'pick' ? onAir : store('ri.home', 'KISW')));
   useEffect(() => save('ri.home', home), [home]);
+  useEffect(() => { if (onAir) clearOnAir(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const watchLive = (id) => { setLiveId(id); setView('live'); window.scrollTo({ top: 0 }); };
   const homeStation = STATIONS.find((s) => s.id === home) || STATIONS[0];
   const hours = useMemo(() => Math.max(1, (now - events[events.length - 1].ts) / 3600000), [events, now]);
 
@@ -3080,7 +3089,7 @@ function StationsView({ events, now, onAdvertiser, onOpen }) {
 
   return (
     <>
-      <div className="ri-home">
+      {view !== 'live' && <div className="ri-home">
         <label htmlFor="ri-home">Your station</label>
         <select id="ri-home" value={home} onChange={(e) => setHome(e.target.value)}>
           <optgroup label="Seattle TV">
@@ -3088,20 +3097,22 @@ function StationsView({ events, now, onAdvertiser, onOpen }) {
           </optgroup>
           {MARKETS.map((mk) => (
             <optgroup key={mk} label={`${mk} radio`}>
-              {STATIONS.filter((s) => s.market === mk && s.media === 'Radio').map((s) => <option key={s.id} value={s.id}>{s.call} {s.band}</option>)}
+              {STATIONS.filter((s) => s.market === mk && s.media === 'Radio' && !s.nc).map((s) => <option key={s.id} value={s.id}>{s.call} {s.band}</option>)}
             </optgroup>
           ))}
         </select>
-      </div>
+      </div>}
 
       <div className="ri-seg" role="tablist" aria-label="Station view">
-        {[['mine', `My station (${homeStation.call})`], ['vs', 'Vs other stations']].map(([id, label]) => (
+        {[['mine', `My station (${homeStation.call})`], ['vs', 'Vs other stations'], ['live', 'On air now']].map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={view === id} className={view === id ? 'on' : ''} onClick={() => setView(id)}>{label}</button>
         ))}
       </div>
 
+      {view === 'live' && <StationLive events={events} now={now} stationId={liveId} setStationId={setLiveId} onOpen={onOpen} />}
+
       {view === 'mine' && (() => {
-        const peers = STATIONS.filter((s) => s.market === homeStation.market && s.media === homeStation.media);
+        const peers = STATIONS.filter((s) => s.market === homeStation.market && s.media === homeStation.media && !s.nc);
         const ranked = [...peers].sort((a, b) => (perStation.get(b.id)?.spend || 0) - (perStation.get(a.id)?.spend || 0));
         return (
           <MyStation key={home} events={events} home={homeStation} hours={hours} now={now} peers={peers.length}
@@ -3167,7 +3178,7 @@ function StationsView({ events, now, onAdvertiser, onOpen }) {
 
       {view === 'mine' && (
       <>
-      <div className="ri-section-head"><h2>Coverage</h2><span className="ri-count">{STATIONS.length} commercial stations monitored</span></div>
+      <div className="ri-section-head"><h2>Coverage</h2><span className="ri-count">{STATIONS.length} stations monitored · {STATIONS.filter((s) => s.nc).length} non-commercial</span></div>
       <div className="ri-table-wrap">
         <table className="ri-table">
           <thead><tr><th>Market</th><th className="num">Stations</th><th className="num">FM / AM / TV</th><th className="num">Online</th><th className="num">Spots</th><th className="num">Est. $</th></tr></thead>
@@ -3186,14 +3197,14 @@ function StationsView({ events, now, onAdvertiser, onOpen }) {
         </table>
       </div>
 
-      <div className="ri-section-head"><h2>{homeStation.market} stream monitor</h2><span className="ri-count">{marketStations.length} streams</span></div>
+      <div className="ri-section-head"><h2>{homeStation.market} stream monitor</h2><span className="ri-count">{marketStations.length} streams · tap one to watch it live</span></div>
       <div className="ri-table-wrap">
         <table className="ri-table">
           <thead><tr><th>Station</th><th>Status</th><th className="num">Spots/hr</th><th className="num">Ad min/hr</th><th className="num">Est. $</th><th>Last spot</th></tr></thead>
           <tbody>
             {marketStations.map(({ s, p }) => (
-              <tr key={s.id} className={s.id === home ? 'home' : ''}>
-                <td><b>{s.call}</b> <span className="muted">{s.network || s.band}</span></td>
+              <tr key={s.id} className={`ri-row-tap ${s.id === home ? 'home' : ''}`} onClick={() => watchLive(s.id)} title={`Watch ${s.call} live`}>
+                <td><b>{s.call}</b> <span className="muted">{s.network || s.band}{s.nc ? ' · non-comm.' : ''}</span></td>
                 <td><span className={`ri-status ${s.status}`} title={s.note || ''}>{s.status === 'live' ? 'Live' : 'Degraded'}</span></td>
                 <td className="num">{(p.spots / hours).toFixed(1)}</td>
                 <td className="num">{(p.secs / 60 / hours).toFixed(1)}</td>
@@ -3209,7 +3220,333 @@ function StationsView({ events, now, onAdvertiser, onOpen }) {
       ))}
       </>
       )}
-      <p className="muted small">Radio call signs and frequencies come from public market lists (full-power commercial band). Seattle TV is the 8 main broadcast stations. Advertisers, spot counts, spend and stream status are simulated for this demo.</p>
+      <p className="muted small">Radio call signs and frequencies come from public market lists (full-power stations, 88.1 to 107.9 FM plus AM; Seattle includes the non-commercial band, which airs sponsor credits, not ads). Seattle TV is the 8 main broadcast stations. Advertisers, spot counts, spend and stream status are simulated for this demo.</p>
+    </>
+  );
+}
+
+// ------------------------------------------------------------------ on air now (station mode)
+
+// Station picker: every market, FM in dial order (88.1 first), non-commercial marked.
+function StationPicker({ id, value, onChange, label }) {
+  return (
+    <div className="ri-home">
+      <label htmlFor={id}>{label}</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        <optgroup label="Seattle TV">
+          {TV_STATIONS.map((s) => <option key={s.id} value={s.id}>{s.call} {s.network}</option>)}
+        </optgroup>
+        {MARKETS.map((mk) => (
+          <optgroup key={mk} label={`${mk} radio`}>
+            {STATIONS.filter((s) => s.market === mk && s.media === 'Radio').map((s) => (
+              <option key={s.id} value={s.id}>{s.call} {s.band}{s.nc ? ' · non-commercial' : ''}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// Spots less than 4 minutes apart on the same station count as one ad break.
+function toBreaks(spots) {
+  const out = [];
+  for (const d of spots) {
+    const cur = out[out.length - 1];
+    if (cur && cur.start - d.ts < 4 * 60000) { cur.spots.push(d); cur.start = d.ts; } else out.push({ start: d.ts, spots: [d] });
+  }
+  return out;
+}
+
+// Pick one station and watch every ad on it, in order, as it airs.
+function StationLive({ events, now, stationId, setStationId, onOpen }) {
+  const [limit, setLimit] = useState(12);
+  const st = STATIONS.find((s) => s.id === stationId) || STATIONS[0];
+  const spots = useMemo(() => events.filter((d) => d.station.id === st.id), [events, st]);
+  const hourAgo = now - 3600000;
+  const lastHour = spots.filter((d) => d.ts > hourAgo);
+  const adMin = lastHour.reduce((a, d) => a + d.creative.length, 0) / 60;
+  const breaks = toBreaks(spots);
+  const last = spots[0];
+  return (
+    <>
+      <StationPicker id="ri-onair" value={st.id} onChange={(v) => { setStationId(v); setLimit(12); }} label="Watch this station" />
+      <div className="ri-onair-card">
+        <div className="top">
+          <span className="ri-onair-badge"><span className="ri-live-dot" aria-hidden="true" />On air</span>
+          <b>{st.call}</b>
+          <span className="muted">{st.network || st.band} · {st.market}</span>
+          <span className={`ri-status ${st.status}`} title={st.note || ''}>{st.status === 'live' ? 'Stream live' : 'Degraded'}</span>
+        </div>
+        {st.nc ? (
+          <p className="muted">Non-commercial station. It airs sponsor credits ("underwriting"), not paid ads. We'll list sponsor mentions here once recording starts; the demo has none.</p>
+        ) : (
+          <div className="ri-onair-stats">
+            <div><b>{lastHour.length}</b><span>ads, last hour</span></div>
+            <div><b>{adMin.toFixed(1)}</b><span>ad minutes, last hour</span></div>
+            <div><b>{last ? ago(last.ts, now) : '–'}</b><span>last ad</span></div>
+          </div>
+        )}
+        {st.note && <p className="ri-note"><span className="ri-status degraded">Degraded</span> {st.note}. Spots may be missed until it recovers.</p>}
+      </div>
+      {!st.nc && (
+        <>
+          <div className="ri-section-head">
+            <h2>Every ad on {st.call}, in order</h2>
+            <span className="ri-count">newest on top · last 3 hrs</span>
+          </div>
+          <p className="ri-feed-explain">New ads drop in at the top the moment they air. Spots within 4 minutes of each other are grouped as one break. Tap an ad for the full offer.</p>
+          {breaks.length === 0 && <p className="ri-empty">No ads heard on {st.call} in the last 3 hours of the demo.</p>}
+          <ol className="ri-breaks">
+            {breaks.slice(0, limit).map((b) => {
+              const secs = b.spots.reduce((a, d) => a + d.creative.length, 0);
+              return (
+                <li key={b.spots[0].id}>
+                  <div className="ri-break-head">
+                    <span className="mono">{timeOf(b.start)}</span>
+                    <span>{b.spots.length > 1 ? `Break · ${b.spots.length} ads` : 'Ad'} · {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, '0')}</span>
+                    <span className="muted">{b.spots[0].daypart}</span>
+                  </div>
+                  <ul>
+                    {[...b.spots].reverse().map((d) => (
+                      <li key={d.id}>
+                        <button type="button" className={`ri-break-spot ${now - d.ts < 10000 ? 'fresh' : ''}`} onClick={() => onOpen(d)}>
+                          <span className="mono t">{timeOf(d.ts)}</span>
+                          <span className="len">:{d.creative.length}</span>
+                          <span className="nm"><b>{d.creative.advertiser}</b><span>{d.creative.offer.headline}</span></span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              );
+            })}
+          </ol>
+          {breaks.length > limit && <button type="button" className="ri-more" onClick={() => setLimit(limit + 12)}>Show earlier breaks</button>}
+          <p className="muted small">Demo: only the demo advertisers are shown, so breaks look thin. With real recording, every spot in every break is logged (no audio kept, just the facts).</p>
+        </>
+      )}
+    </>
+  );
+}
+
+// ------------------------------------------------------------------ ad check (did my ads run?)
+
+const CHECK_WINDOWS = [['1h', '1 hr', 1 / 24, 'last hour'], ['24h', '24 hrs', 1, 'last 24 hrs'], ['7d', '7 days', 7, 'last 7 days'], ['30d', '30 days', CHECK_MAX_DAYS, 'last 30 days']];
+const ADVERTISERS = [...new Set(CREATIVES.map((c) => c.advertiser))].sort();
+
+function CheckView({ events, now, me, onOpen, notify }) {
+  const [name, setName] = useState(() => (me && ADVERTISERS.includes(me) ? me : ''));
+  const [typed, setTyped] = useState(name);
+  const [win, setWin] = useState('7d');
+  const [keyword, setKeyword] = useState('');
+  const [orders, setOrders] = useState(() => store('ri.orders.v1', {}));
+  const [addSt, setAddSt] = useState('');
+  const [addN, setAddN] = useState('');
+  const [limit, setLimit] = useState(30);
+  useEffect(() => save('ri.orders.v1', orders), [orders]);
+
+  const creatives = CREATIVES.filter((c) => c.advertiser === name);
+  const market = creatives.find((c) => c.market)?.market || null;
+  const days = CHECK_WINDOWS.find((w) => w[0] === win)[2];
+  const from = now - days * 86400000;
+  const hourKey = Math.floor(now / 3600000);
+  // The live feed covers the last 3 hours; older spots come from the stored log (rebuilt for the demo).
+  const cutoff = events.length ? events[events.length - 1].ts : now - WINDOW_MS;
+  const history = useMemo(() => (name ? airingHistory(name, from, Math.min(cutoff, now)) : []), [name, win, hourKey, cutoff > from]); // eslint-disable-line react-hooks/exhaustive-deps
+  const kw = keyword.trim().toLowerCase();
+  const airings = useMemo(() => {
+    const recent = events.filter((d) => d.creative.advertiser === name && d.ts >= from);
+    const all = [...recent, ...history].sort((a, b) => b.ts - a.ts);
+    if (!kw) return all;
+    return all.filter((d) => [d.creative.offer.headline, d.creative.offer.product, d.creative.transcript, d.creative.offer.promoCode].some((v) => v && String(v).toLowerCase().includes(kw)));
+  }, [events, history, name, from, kw]);
+
+  const order = orders[name] || {};
+  const orderIds = Object.keys(order);
+  const byStation = new Map();
+  for (const d of airings) {
+    const cur = byStation.get(d.station.id) || { s: d.station, n: 0, secs: 0, last: 0 };
+    cur.n += 1; cur.secs += d.creative.length; cur.last = Math.max(cur.last, d.ts);
+    byStation.set(d.station.id, cur);
+  }
+  const scale = days / 7;
+  const rows = [
+    ...orderIds.map((id) => {
+      const s = STATIONS.find((x) => x.id === id);
+      const h = byStation.get(id);
+      const bought = Math.round(order[id] * scale);
+      const heard = h ? h.n : 0;
+      const short = Math.max(0, bought - heard);
+      const avg = (s?.rate60 || 0) * 0.7; // a :30 at an average daypart
+      return { id, s, bought, heard, short, value: short * avg, status: heard === 0 ? 'none' : heard >= bought * 0.95 ? 'ok' : 'short' };
+    }),
+    ...[...byStation.values()].filter((h) => !order[h.s.id]).map((h) => ({ id: h.s.id, s: h.s, bought: null, heard: h.n, short: 0, value: 0, status: 'extra' })),
+  ].sort((a, b) => (b.bought ?? -1) - (a.bought ?? -1) || b.heard - a.heard);
+  const shortRows = rows.filter((r) => r.status === 'short' || r.status === 'none');
+  const missedValue = shortRows.reduce((a, r) => a + r.value, 0);
+  const canCompare = days >= 1 && orderIds.length > 0;
+
+  // Counts by hour (1h and 24h views) or by day (7 and 30 days).
+  const buckets = useMemo(() => {
+    if (days <= 1) {
+      const n = days < 1 ? 12 : 24;
+      const size = days < 1 ? 5 * 60000 : 3600000;
+      const end = Math.ceil(now / size) * size;
+      return Array.from({ length: n }, (_, i) => {
+        const s = end - (n - i) * size;
+        return { label: days < 1 ? timeOf(s) : hourLabel(new Date(s).getHours()), n: airings.filter((d) => d.ts >= s && d.ts < s + size).length };
+      });
+    }
+    const n = Math.round(days);
+    const today = new Date(now); today.setHours(0, 0, 0, 0);
+    return Array.from({ length: n }, (_, i) => {
+      const s = today.getTime() - (n - 1 - i) * 86400000;
+      return { label: new Date(s).toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }), n: airings.filter((d) => d.ts >= s && d.ts < s + 86400000).length };
+    });
+  }, [airings, days, now]);
+  const peak = Math.max(1, ...buckets.map((b) => b.n));
+
+  const pick = (v) => {
+    const hit = ADVERTISERS.find((a) => a.toLowerCase() === v.trim().toLowerCase()) || ADVERTISERS.find((a) => a.toLowerCase().includes(v.trim().toLowerCase()));
+    setTyped(hit || v); setName(hit || ''); setLimit(30);
+  };
+  const addOrder = () => {
+    const n = parseInt(addN, 10);
+    if (!addSt || !(n > 0)) return;
+    setOrders({ ...orders, [name]: { ...order, [addSt]: n } });
+    setAddSt(''); setAddN('');
+  };
+  const removeOrder = (id) => { const o = { ...order }; delete o[id]; setOrders({ ...orders, [name]: o }); };
+  const winLabel = CHECK_WINDOWS.find((w) => w[0] === win)[3];
+  const copy = async (text, msg) => {
+    try { await navigator.clipboard.writeText(text); notify(msg, 'Paste it into Sheets, an email or a text'); } catch { notify('Copy failed', 'Your browser blocked the clipboard'); }
+  };
+  const makegoodNote = () => [
+    `${name}: radio schedule check, ${winLabel} (to ${new Date(now).toLocaleString('en-US')})`,
+    ...shortRows.map((r) => `${r.s?.call || r.id}: ordered ${r.bought}, heard ${r.heard}, short ${r.short}${r.value ? ` (about ${money(r.value)})` : ''}`),
+    'Please confirm the missing spots and schedule makegoods.',
+  ].join('\n');
+  const stationChoices = STATIONS.filter((s) => !s.nc && (market ? s.market === market : true) && !order[s.id] && (s.media === 'Radio' || !market || market === 'Seattle'));
+
+  return (
+    <>
+      <div className="ri-section-head"><h2>Ad Check</h2><span className="ri-count">did my ads run?</span></div>
+      <p className="ri-feed-explain">
+        Type your business and see every spot we heard, by hour or by day, on each station. Add what you bought and we flag any station that came up short, so you can ask for makegoods.
+      </p>
+
+      <form className="ri-check-form" onSubmit={(e) => { e.preventDefault(); pick(typed); }}>
+        <label htmlFor="ri-check-name">Business</label>
+        <div className="row">
+          <input id="ri-check-name" list="ri-check-list" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Dealer or business name" autoComplete="off" />
+          <button type="submit" className="ri-btn">Check</button>
+        </div>
+        <datalist id="ri-check-list">{ADVERTISERS.map((a) => <option key={a} value={a} />)}</datalist>
+        {me && me !== name && ADVERTISERS.includes(me) && (
+          <button type="button" className="ri-link" onClick={() => pick(me)}>Use {me} (Insights on)</button>
+        )}
+      </form>
+
+      {!name && typed.trim() && (
+        <p className="ri-empty">We haven't heard any ads for "{typed.trim()}" yet. Once recording runs, every airing lands here within seconds.</p>
+      )}
+
+      {name && (
+        <>
+          <div className="ri-seg" role="tablist" aria-label="Time window">
+            {CHECK_WINDOWS.map(([id, label]) => (
+              <button key={id} type="button" role="tab" aria-selected={win === id} className={win === id ? 'on' : ''} onClick={() => { setWin(id); setLimit(30); }}>{label}</button>
+            ))}
+          </div>
+          <input className="ri-check-kw" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Only ads that mention… (optional: a promo, a model, a sale name)" />
+
+          <div className="ri-onair-stats wide">
+            <div><b>{airings.length}</b><span>spots heard</span></div>
+            <div><b>{byStation.size}</b><span>stations</span></div>
+            <div><b>{(airings.reduce((a, d) => a + d.creative.length, 0) / 60).toFixed(1)}</b><span>ad minutes</span></div>
+            <div><b>{airings[0] ? ago(airings[0].ts, now) : '–'}</b><span>last heard</span></div>
+          </div>
+
+          <div className="ri-section-head"><h2>{days <= 1 ? 'By hour' : 'By day'}</h2><span className="ri-count">spots heard · {winLabel}</span></div>
+          <div className={`ri-check-bars ${buckets.length > 14 ? 'dense' : ''}`}>
+            {buckets.map((b) => (
+              <div key={b.label} className="bar" title={`${b.label}: ${b.n} spots`}>
+                <span className="n">{b.n || ''}</span>
+                <span className="fill" style={{ height: `${(b.n / peak) * 100}%` }} />
+                <span className="lb">{b.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="ri-section-head"><h2>What you bought vs what aired</h2><span className="ri-count">by station</span></div>
+          {orderIds.length === 0 && (
+            <p className="ri-feed-explain">Add each station on your order and the spots per week. Without an order we still list every station we heard you on.</p>
+          )}
+          <div className="ri-check-add">
+            <select value={addSt} onChange={(e) => setAddSt(e.target.value)} aria-label="Station you bought">
+              <option value="">Add a station you bought…</option>
+              {stationChoices.map((s) => <option key={s.id} value={s.id}>{s.call} {s.network || s.band}{s.market !== market ? ` · ${s.market}` : ''}</option>)}
+            </select>
+            <input type="number" min="1" inputMode="numeric" value={addN} onChange={(e) => setAddN(e.target.value)} placeholder="Spots/wk" aria-label="Spots per week" />
+            <button type="button" className="ri-btn" onClick={addOrder} disabled={!addSt || !(parseInt(addN, 10) > 0)}>Add</button>
+          </div>
+          {rows.length > 0 && (
+            <div className="ri-table-wrap">
+              <table className="ri-table ri-check-table">
+                <thead><tr><th>Station</th><th className="num">Bought</th><th className="num">Heard</th><th>Result</th></tr></thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id}>
+                      <td><b>{r.s?.call || r.id}</b>{r.bought != null && <button type="button" className="ri-x" onClick={() => removeOrder(r.id)} aria-label={`Remove ${r.s?.call || r.id}`}>×</button>}</td>
+                      <td className="num">{r.bought == null ? '–' : `${days < 1 ? '' : days === 7 ? '' : '≈'}${r.bought}`}</td>
+                      <td className="num">{r.heard}</td>
+                      <td>
+                        {r.status === 'ok' && <span className="ri-check-tag ok">✓ Ran</span>}
+                        {r.status === 'short' && canCompare && <span className="ri-check-tag short">Short {r.short}</span>}
+                        {r.status === 'none' && canCompare && <span className="ri-check-tag short">Not heard</span>}
+                        {r.status === 'extra' && orderIds.length > 0 && <span className="ri-check-tag extra" title="Heard on this station, but it isn't on the order you entered">Not ordered</span>}
+                        {!canCompare && r.status !== 'extra' && <span className="muted small">use 24 hrs+</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {canCompare && (shortRows.length === 0 ? (
+            <div className="ri-beat ok"><b>✓ Every station on your order delivered its spots for the {winLabel}.</b></div>
+          ) : (
+            <div className="ri-beat threat">
+              <b>{shortRows.reduce((a, r) => a + r.short, 0)} ordered spots not heard on {shortRows.length} station{shortRows.length > 1 ? 's' : ''}</b>
+              <span className="muted">{missedValue > 0 ? `About ${money(missedValue)} at typical :30 rates (an estimate). ` : ''}Ask the station rep for makegoods.</span>
+              <button type="button" className="ri-link" onClick={() => copy(makegoodNote(), 'Makegood note copied')}>Copy a note to the rep →</button>
+            </div>
+          ))}
+          {orderIds.length > 0 && days !== 7 && days >= 1 && <p className="muted small">Bought is your weekly count spread over the {winLabel}, so ≈ is a pro-rated target. Flights that skip days can look short on a single day; the 7-day view is exact.</p>}
+
+          <div className="ri-section-head"><h2>Airing log</h2><span className="ri-count">newest first · tap for the ad</span></div>
+          <button type="button" className="ri-link" onClick={() => copy(toTSV(airings), `${airings.length} spots copied`)}>Copy the log for Google Sheets →</button>
+          <ul className="ri-check-log">
+            {airings.slice(0, limit).map((d) => (
+              <li key={d.id}>
+                <button type="button" onClick={() => onOpen(d)}>
+                  <span className="mono when">{new Date(d.ts).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                  <b>{d.station.call}</b>
+                  <span className="muted">:{d.creative.length} · {d.daypart}</span>
+                  <span className="mono muted">{d.confidence}%</span>
+                  <span className="hl">{d.creative.offer.headline}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {airings.length > limit && <button type="button" className="ri-more" onClick={() => setLimit(limit + 50)}>Show {Math.min(50, airings.length - limit)} more</button>}
+          <p className="muted small">
+            Proof of airing = station, exact time, length and the words we matched (the % is match confidence). We keep up to {CHECK_MAX_DAYS} days and store no audio.
+            Demo: the live 3 hours are the feed; older spots are rebuilt at the same pace, so they're simulated.
+          </p>
+        </>
+      )}
     </>
   );
 }

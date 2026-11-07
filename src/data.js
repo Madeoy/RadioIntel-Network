@@ -10,7 +10,11 @@ export const MARKETS = ['Seattle', 'Portland', 'Spokane', 'Boise', 'Nashville'];
 
 const RAW_STATIONS = {
   Seattle: {
-    fm: 'KQMV 92.5,KJR-FM 93.3,KLSY 93.7,KSWD 94.1,KJEB 95.7,KXXO 96.1,KJAQ 96.5,KIRO-FM 97.3,KPNW-FM 98.9,KDDS-FM 99.3,KISW 99.9,KKWF 100.7,KPLZ-FM 101.5,KZOK-FM 102.5,KZTM 102.9,KHTP 103.7,KLSW 104.5,KTDD 104.9,KCMS 105.3,KBKS-FM 106.1,KRWM 106.9,KNDD 107.7',
+    fm: 'KQMV 92.5,KJR-FM 93.3,KLSY 93.7,KSWD 94.1,KJEB 95.7,KXXO 96.1,KJAQ 96.5,KIRO-FM 97.3,KPNW-FM 98.9,KDDS-FM 99.3,KISW 99.9,KKWF 100.7,KPLZ-FM 101.5,KZOK-FM 102.5,KZTM 102.9,KHTP 103.7,KTDD 104.9,KBKS-FM 106.1,KRWM 106.9,KNDD 107.7',
+    // Non-commercial FM (the 88.1–91.9 band plus public and listener-supported stations higher up).
+    // They air sponsor credits ("underwriting"), not paid ads. From Wikipedia's Washington list, Nov 7 2026.
+    // Low-power LP stations are left out.
+    nc: 'KWAO 88.1,KNKX 88.5,KMIH 88.9,KASB 89.3,KNHC 89.5,KGRG-FM 89.9,KGHP 89.9,KUPS 90.1,KEXP-FM 90.3,KSER 90.7,KVTI 90.9,KBCS 91.3,KQXI 91.5,KYFQ 91.7,KUOW-FM 94.9,KING-FM 98.1,KLSW 104.5,KCMS 105.3',
     am: 'KVI 570,KCIS 630,KIRO 710,KTTH 770,KGNW 820,KHHO 850,KIXI 880,KJR 950,KNWN 1000,KBLE 1050,KPTR 1090,KKNW 1150,KLAY 1180,KMIA 1210,KWYZ 1230,KKDZ 1250,KKOL 1300,KGRG 1330,KKMO 1360,KRKO 1380,KITZ 1400,KRIZ 1420,KSUH 1450,KBRO 1480,KKXA 1520,KXPA 1540,KZIZ 1560,KLFE 1590,KYIZ 1620,KNTS 1680',
     fmRate: [180, 420], amRate: [30, 100],
   },
@@ -50,19 +54,21 @@ const hash = (s) => [...s].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 167
 
 export const STATIONS = MARKETS.flatMap((market) => {
   const m = RAW_STATIONS[market];
-  const parse = (list, band, [lo, hi]) => list.split(',').map((entry) => {
+  const parse = (list, band, [lo, hi], nc = false) => (list ? list.split(',') : []).map((entry) => {
     const [id, freq] = entry.trim().split(' ');
     const r = mulberry32(hash(id))();
     return {
-      id, freq, band, market,
+      id, freq, band, market, nc,
       call: `${id} ${freq}`,
-      rate60: Math.round((lo + r * (hi - lo)) / 10) * 10,
-      weight: band === 'FM' ? 1 : 0.3,
+      rate60: nc ? 0 : Math.round((lo + r * (hi - lo)) / 10) * 10,
+      weight: nc ? 0 : band === 'FM' ? 1 : 0.3,
       status: DEGRADED[id] ? 'degraded' : 'live',
       note: DEGRADED[id],
     };
   });
-  return [...parse(m.fm, 'FM', m.fmRate), ...parse(m.am, 'AM', m.amRate)].map((s) => ({ ...s, media: 'Radio' }));
+  // FM in dial order (88.1 first), then AM.
+  const fm = [...parse(m.fm, 'FM', m.fmRate), ...parse(m.nc, 'FM', [0, 0], true)].sort((a, b) => parseFloat(a.freq) - parseFloat(b.freq));
+  return [...fm, ...parse(m.am, 'AM', m.amRate)].map((s) => ({ ...s, media: 'Radio' }));
 });
 
 // Seattle broadcast TV (call signs from memory; verify against FCC). TV is Seattle-only in the demo.
@@ -325,10 +331,10 @@ export const CREATIVES = RAW_CREATIVES.map((c) => {
     pool = c.tvN ? [...TV_STATIONS].sort(() => r() - 0.5).slice(0, c.tvN) : TV_STATIONS;
   } else if (c.stations) pool = c.stations.map((id) => STATION_BY_ID[id]).filter(Boolean);
   else if (c.market) {
-    const inMarket = STATIONS.filter((s) => s.market === c.market && s.band === 'FM');
+    const inMarket = STATIONS.filter((s) => s.market === c.market && s.band === 'FM' && !s.nc);
     const r = mulberry32(hash(c.id));
     pool = [...inMarket].sort(() => r() - 0.5).slice(0, c.n);
-  } else pool = STATIONS.filter((s) => s.media === 'Radio');
+  } else pool = STATIONS.filter((s) => s.media === 'Radio' && !s.nc);
   const market = c.market || (c.stations ? STATION_BY_ID[c.stations[0]].market : null);
   return {
     type: 'Produced',
@@ -430,10 +436,10 @@ function weightedPick(rng, items, w) {
 }
 
 let seq = 0;
-export function makeDetection(rng, ts, media = 'Radio') {
+export function makeDetection(rng, ts, media = 'Radio', forced = null) {
   radioCache = radioCache || RADIO_CREATIVES();
   tvCache = tvCache || TV_CREATIVES();
-  const c = weightedPick(rng, media === 'TV' ? tvCache : radioCache, (x) => x.weight);
+  const c = forced || weightedPick(rng, media === 'TV' ? tvCache : radioCache, (x) => x.weight);
   const s = weightedPick(rng, c.pool, (x) => x.weight);
   const dp = media === 'TV' ? tvDaypartFor(new Date(ts)) : daypartFor(new Date(ts));
   const podSize = 4 + Math.floor(rng() * 4);
@@ -472,9 +478,40 @@ export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const TV_HOUR_PROFILE = [0.3, 0.2, 0.1, 0.1, 0.15, 0.5, 0.75, 0.8, 0.7, 0.45, 0.45, 0.5, 0.55, 0.5, 0.5, 0.6, 0.85, 1.0, 0.95, 0.9, 1.0, 1.0, 0.95, 0.8];
 
+// Ad Check history (SIMULATED). The live feed only holds 3 hours, so older airings for one
+// advertiser are rebuilt at the same pace the live feed uses, per clock hour, the same every time.
+// In production this is simply the stored log of every spot we recorded.
+export const CHECK_MAX_DAYS = 30;
+export function airingHistory(advertiser, fromTs, toTs) {
+  radioCache = radioCache || RADIO_CREATIVES();
+  tvCache = tvCache || TV_CREATIVES();
+  const out = [];
+  const mean = (p) => p.reduce((a, x) => a + x, 0) / p.length;
+  const kinds = [[radioCache, 150, 'Radio', HOUR_PROFILE], [tvCache, 70 / 3, 'TV', TV_HOUR_PROFILE]];
+  for (const [pool, perHour, media, profile] of kinds) {
+    const total = pool.reduce((a, x) => a + x.weight, 0);
+    const avg = mean(profile);
+    for (const c of pool.filter((x) => x.advertiser === advertiser)) {
+      const base = (perHour * c.weight) / total;
+      for (let h0 = Math.floor(fromTs / 3600000); h0 * 3600000 < toTs; h0++) {
+        const start = h0 * 3600000;
+        const d = new Date(start);
+        const f = (profile[d.getHours()] / avg) * DAY_FACTOR[(d.getDay() + 6) % 7];
+        const rng = mulberry32(hash(`${c.id}|${h0}`));
+        const n = Math.floor(base * f + rng());
+        for (let i = 0; i < n; i++) {
+          const ts = start + Math.floor(rng() * 3600000);
+          if (ts >= fromTs && ts < toTs) out.push(makeDetection(rng, ts, media, c));
+        }
+      }
+    }
+  }
+  return out;
+}
+
 export function heatGrid(market, category, media = 'Both') {
   const inScope = (s) => (market === 'All' || s.market === market);
-  const radioBase = media === 'TV' ? 0 : STATIONS.filter((s) => s.media === 'Radio' && inScope(s)).reduce((a, s) => a + s.weight, 0) * 11;
+  const radioBase = media === 'TV' ? 0 : STATIONS.filter((s) => s.media === 'Radio' && !s.nc && inScope(s)).reduce((a, s) => a + s.weight, 0) * 11;
   const tvBase = media === 'Radio' ? 0 : TV_STATIONS.filter(inScope).reduce((a, s) => a + s.weight, 0) * 28;
   const catF = category === 'All' ? 1 : 0.14;
   const rng = mulberry32(hash(`${market}|${category}|${media}`));

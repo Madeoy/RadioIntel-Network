@@ -956,3 +956,63 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-heat-pick { font-size: 0.88rem; }
 .ri-heat-pick .ri-link { font-weight: 700; color: var(--accent); }
 @media (min-width: 760px) { .ri-heat-uses { grid-template-columns: 1fr 1fr; } }
+
+/* ---------- Stations > On air now */
+.ri-onair-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.ri-onair-card .top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.ri-onair-card .top b { font-size: 1.15rem; }
+.ri-onair-card p { margin: 0; font-size: 0.85rem; line-height: 1.45; }
+.ri-onair-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--danger); background: var(--danger-soft); border-radius: 999px; padding: 3px 9px 3px 7px; }
+.ri-onair-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ri-onair-stats.wide { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 10px; }
+.ri-onair-stats div { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ri-onair-stats b { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.ri-onair-stats span { font-size: 0.7rem; color: var(--muted); }
+@media (max-width: 420px) { .ri-onair-stats.wide { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ri-breaks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ri-breaks > li { border-left: 2px solid var(--line-strong); padding-left: 10px; }
+.ri-breaks > li:first-child { border-left-color: var(--accent); }
+.ri-break-head { display: flex; gap: 10px; align-items: baseline; font-size: 0.75rem; font-weight: 700; color: var(--fg); margin-bottom: 6px; flex-wrap: wrap; }
+.ri-breaks ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ri-break-spot { width: 100%; display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 10px; align-items: start; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; color: var(--fg); }
+.ri-break-spot.fresh { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft); }
+.ri-break-spot .t { font-size: 0.78rem; color: var(--muted); }
+.ri-break-spot .len { font-size: 0.75rem; color: var(--muted); font-family: var(--font-mono); }
+.ri-break-spot .nm { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ri-break-spot .nm span { font-size: 0.82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ri-row-tap { cursor: pointer; }
+.ri-row-tap:hover td { background: var(--surface-2); }
+
+/* ---------- Ad Check */
+.ri-check-form { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.ri-check-form label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.ri-check-form .row { display: flex; gap: 8px; }
+.ri-check-form input, .ri-check-kw, .ri-check-add select, .ri-check-add input {
+  min-width: 0; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; color: var(--fg); padding: 11px 12px; font: inherit; font-size: 16px;
+}
+.ri-check-form input { flex: 1; }
+.ri-check-form .ri-link { align-self: flex-start; font-size: 0.82rem; }
+.ri-check-kw { width: 100%; margin-top: 10px; }
+.ri-check-bars { display: flex; align-items: stretch; gap: 3px; height: 120px; padding-bottom: 34px; position: relative; }
+.ri-check-bars .bar { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; }
+.ri-check-bars .fill { width: 100%; max-width: 28px; min-height: 2px; background: var(--radio); border-radius: 3px 3px 0 0; }
+.ri-check-bars .n { font-size: 0.65rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+.ri-check-bars .lb { position: absolute; top: 100%; margin-top: 4px; font-size: 0.6rem; color: var(--muted); white-space: nowrap; transform: rotate(-50deg); transform-origin: top right; right: 50%; }
+.ri-check-bars.dense .n { display: none; }
+.ri-check-add { display: grid; grid-template-columns: minmax(0, 1fr) 96px auto; gap: 8px; margin-bottom: 10px; }
+.ri-check-tag { font-size: 0.72rem; font-weight: 800; border-radius: 999px; padding: 3px 8px; white-space: nowrap; }
+.ri-check-tag.ok { color: var(--accent); background: var(--accent-soft); }
+.ri-check-tag.short { color: var(--danger); background: var(--danger-soft); }
+.ri-check-tag.extra { color: var(--amber); background: var(--amber-soft); }
+.ri-x { background: none; border: 0; color: var(--muted); font-size: 1.1rem; padding: 0 6px; }
+.ri-beat .ri-link { margin-top: 6px; display: inline-block; }
+.ri-check-log { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ri-check-log button { width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; color: var(--fg); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.ri-check-log .when { font-size: 0.78rem; }
+.ri-check-log .muted { font-size: 0.75rem; }
+.ri-check-log .hl { flex-basis: 100%; font-size: 0.82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ri-nav button span { white-space: nowrap; }
+.ri-check-form .row .ri-btn { flex: none; padding-left: 18px; padding-right: 18px; }
+.ri-check-table td, .ri-check-table th { padding-left: 8px; padding-right: 8px; }
+.ri-check-table .ri-x { margin-left: 2px; }
+.ri-table.ri-check-table { min-width: 0; }
