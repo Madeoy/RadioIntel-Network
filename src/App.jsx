@@ -796,7 +796,7 @@ function highlight(text, keywords) {
   return parts.map((p, i) => (i % 2 === 1 ? <mark key={i}>{p}</mark> : p));
 }
 
-// Play the spot. Demo: the phone's voice reads the transcript. Live: the real recording plays.
+// Read the captured ad text aloud with the phone's computer voice. Never plays original audio (data policy: facts only).
 function HearIt({ text }) {
   const [playing, setPlaying] = useState(false);
   const ok = typeof window !== 'undefined' && 'speechSynthesis' in window;
@@ -813,8 +813,8 @@ function HearIt({ text }) {
   };
   return (
     <div className="ri-hear">
-      <button type="button" className="ri-btn" onClick={toggle}>{playing ? '■ Stop' : '▶ Hear the ad'}</button>
-      <span className="muted small">Demo: your phone’s voice reads the transcript. With live data this plays the real recording.</span>
+      <button type="button" className="ri-btn" onClick={toggle}>{playing ? '■ Stop' : '▶ Listen to ad capture'}</button>
+      <span className="muted small">A computer voice reads the words we captured from this ad. We don't store or replay the original audio.</span>
     </div>
   );
 }
