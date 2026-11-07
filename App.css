@@ -83,6 +83,19 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-brand h1 { font-family: var(--font-display); font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; margin: 0; line-height: 1.1; }
 .ri-node { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ri-header-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.ri-brand-text { min-width: 0; display: flex; flex-direction: column; }
+.ri-node { overflow: hidden; text-overflow: ellipsis; }
+/* Phone widths: shorten the header so the clock line never runs under the badges. */
+@media (max-width: 440px) {
+  .ri-header .wide { display: none; }
+  .ri-header-actions { gap: 6px; }
+  .ri-live { padding: 6px 8px; }
+}
+@media (max-width: 380px) {
+  .ri-node { font-size: 0.6rem; }
+  .ri-brand { gap: 8px; }
+  .ri-logo { width: 26px; height: 26px; }
+}
 .ri-demo {
   font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--amber); background: var(--amber-soft); padding: 4px 7px; border-radius: 4px;

@@ -208,13 +208,13 @@ function Header({ live, setLive }) {
           <circle cx="16" cy="16" r="3" fill="currentColor" />
           <path d="M9.5 9.5a9 9 0 0 0 0 13M22.5 9.5a9 9 0 0 1 0 13M5.5 5.5a15 15 0 0 0 0 21M26.5 5.5a15 15 0 0 1 0 21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
-        <div>
+        <div className="ri-brand-text">
           <h1>RadioIntel</h1>
-          <span className="ri-node">Node Seattle-01 · {clock.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
+          <span className="ri-node"><span className="wide">Node </span>Seattle-01 · {clock.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
         </div>
       </div>
       <div className="ri-header-actions">
-        <span className="ri-demo" title="Station names are real; every detection and offer is simulated">Demo data</span>
+        <span className="ri-demo" title="Station names are real; every detection and offer is simulated">Demo<span className="wide"> data</span></span>
         <button type="button" className={`ri-live ${live ? 'on' : ''}`} onClick={() => setLive(!live)} aria-pressed={live}>
           <span className="dot" />{live ? 'Live' : 'Paused'}
         </button>
