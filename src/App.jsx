@@ -521,20 +521,42 @@ function MediaSwitch({ media, setMedia }) {
   );
 }
 
-function Filters({ market, setMarket, category, setCategory, city, setCity, query, setQuery, adv, setAdv, media, setMedia, showSearch = true, showAdvanced = true }) {
+// compact: phone-first. Search plus one "Filters" button; media, market, category, city and the rest open below it.
+function Filters({ market, setMarket, category, setCategory, city, setCity, query, setQuery, adv, setAdv, media, setMedia, showSearch = true, showAdvanced = true, compact = false }) {
   const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState(false);
   const count = adv ? activeAdvCount(adv) : 0;
   const set = (k, v) => setAdv({ ...adv, [k]: v });
   const tvMissing = media === 'TV' && market !== 'All' && market !== 'Seattle';
+  const search = showSearch && (
+    <input id="ri-search" type="search" placeholder="Search advertiser, city, offer, vehicle, code…" value={query}
+      onChange={(e) => setQuery(e.target.value)} aria-label="Search detections" />
+  );
+  if (compact) {
+    const changed = (category !== 'All') + (city && city !== 'All' ? 1 : 0) + (media && media !== 'Radio' ? 1 : 0) + count;
+    return (
+      <div className="ri-filters-wrap">
+        <div className="ri-quick">
+          {search}
+          <button type="button" className={`ri-filter-btn ${panel || changed ? 'on' : ''}`} onClick={() => setPanel(!panel)} aria-expanded={panel}>
+            Filters{changed ? ` · ${changed}` : ''} <span aria-hidden="true">{panel ? '▴' : '▾'}</span>
+          </button>
+        </div>
+        {tvMissing && <p className="ri-note">TV monitoring covers Seattle in this demo. Switch the market to Seattle to see TV spots.</p>}
+        {panel && (
+          <div className="ri-filter-panel">
+            <Filters {...{ market, setMarket, category, setCategory, city, setCity, query, setQuery, adv, setAdv, media, setMedia, showAdvanced }} showSearch={false} />
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="ri-filters-wrap">
       {setMedia && <MediaSwitch media={media} setMedia={setMedia} />}
       {tvMissing && <p className="ri-note">TV monitoring covers Seattle in this demo. Switch the market to Seattle to see TV spots.</p>}
       <div className="ri-filters">
-        {showSearch && (
-          <input id="ri-search" type="search" placeholder="Search advertiser, city, offer, vehicle, code…" value={query}
-            onChange={(e) => setQuery(e.target.value)} aria-label="Search detections" />
-        )}
+        {search}
         <div className="ri-selects">
           <select id="ri-market" value={market} onChange={(e) => setMarket(e.target.value)} aria-label="Market">
             <option value="All">All 5 markets</option>
@@ -842,7 +864,6 @@ function LiveView({ events, allCount, now, onOpen, watchlist, toggleWatch, goTo,
   const shown = view === 'watching' ? events.filter((d) => watchlist.includes(d.creative.advertiser)) : events;
   return (
     <>
-      <Kpis events={events} market={filters.market} media={filters.media} category={filters.category} now={now} />
       <div className="ri-seg" role="tablist" aria-label="Feed view">
         <button type="button" role="tab" aria-selected={view === 'all'} className={view === 'all' ? 'on' : ''} onClick={() => setView('all')}>All ads</button>
         <button type="button" role="tab" aria-selected={view === 'watching'} className={view === 'watching' ? 'on' : ''} onClick={() => setView('watching')}>
@@ -855,11 +876,18 @@ function LiveView({ events, allCount, now, onOpen, watchlist, toggleWatch, goTo,
           <WatchingPanel events={events} watchlist={watchlist} toggleWatch={toggleWatch} now={now} onOpen={onOpen} goTo={goTo} me={me} setMe={setMe} />
         </>
       )}
-      <Filters {...filters} />
+      <Filters {...filters} compact />
+      <Kpis events={events} market={filters.market} media={filters.media} category={filters.category} now={now} />
       <div className="ri-section-head">
-        <h2>{view === 'watching' ? 'Their latest ads' : 'Live ad feed'}</h2>
+        <h2><span className="ri-live-dot" aria-hidden="true" />{view === 'watching' ? 'Their latest ads' : 'Live ad feed'}</h2>
         <span className="ri-count">{shown.length.toLocaleString('en-US')} of {allCount.toLocaleString('en-US')} spots · last 3 hrs</span>
       </div>
+      {view === 'all' && (
+        <p className="ri-feed-explain">
+          Every ad the moment it airs, newest on top. Tap one for the full offer.{' '}
+          <button type="button" className="ri-link" onClick={() => { goTo('export'); window.scrollTo({ top: 0 }); }}>Send to Google Sheets →</button>
+        </p>
+      )}
       {shown.length === 0 && <p className="ri-empty">No spots match these filters. Clear the search or loosen a filter.</p>}
       <ul className="ri-feed">
         {shown.slice(0, limit).map((d) => <FeedCard key={d.id} d={d} now={now} onOpen={onOpen} />)}

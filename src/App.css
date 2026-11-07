@@ -163,10 +163,18 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-kpi { background: var(--surface); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ri-kpi .v { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ri-kpi .l { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); line-height: 1.2; }
-/* Phones (and phones with large system font): 2 across so numbers never clip. */
-@media (max-width: 480px) {
-  .ri-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ri-kpi .v { font-size: min(1.25rem, 6vw); overflow-wrap: anywhere; }
+/* Phones: the summary is one slim row you can swipe, so the live feed sits near the top. */
+@media (max-width: 759px) {
+  .ri-kpi-head { margin: 0 0 -6px; font-size: 0.68rem; }
+  .ri-kpi-head .ri-seg.mini button { padding: 5px 9px; font-size: 0.72rem; }
+  .ri-kpis {
+    display: flex; gap: 6px; margin-top: 0; overflow-x: auto; background: none; border: 0; border-radius: 0;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity;
+  }
+  .ri-kpis::-webkit-scrollbar { display: none; }
+  .ri-kpi { flex: none; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; scroll-snap-align: start; }
+  .ri-kpi .v { font-size: 0.98rem; white-space: nowrap; }
+  .ri-kpi .l { font-size: 0.58rem; white-space: nowrap; }
 }
 @media (min-width: 760px) {
   .ri-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
@@ -190,6 +198,30 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
   .ri-filters input { flex: 2; }
   .ri-selects { flex: 2; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ri-selects select.city { grid-column: auto; }
+}
+
+/* compact filters (Live tab) */
+.ri-quick { display: flex; gap: 8px; }
+.ri-quick input {
+  flex: 1; min-width: 0; font: inherit; font-size: 0.95rem; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 10px 12px;
+}
+.ri-quick input::placeholder { color: var(--muted); }
+.ri-filter-btn {
+  flex: none; font: inherit; font-size: 0.85rem; font-weight: 700; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 12px;
+}
+.ri-filter-btn.on { color: var(--accent); border-color: rgba(0, 229, 153, 0.45); }
+.ri-filter-panel { padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.02); }
+.ri-feed-explain { margin: -4px 0 2px; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
+.ri-feed-explain .ri-link { font-size: inherit; }
+.ri-live-dot {
+  display: inline-block; width: 8px; height: 8px; margin-right: 8px; vertical-align: middle; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); animation: pulse 1.6s ease-in-out infinite;
+}
+/* Phones: the header scrolls away so the feed gets the whole screen. */
+@media (max-width: 759px) {
+  .ri-header { position: static; }
 }
 
 /* ---------- section heads */
