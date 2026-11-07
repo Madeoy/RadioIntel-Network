@@ -78,6 +78,23 @@ function dealsBeatingMe(meName) {
     .sort((a, b) => b.cmp.gap - a.cmp.gap);
 }
 
+// Every business the app knows: on air (demo) or with a real website we read.
+const ALL_NAMES = [...new Set([...CREATIVES.map((c) => c.advertiser), ...WEB_SITES.map((s) => s.dealer)])].sort();
+const MAKES = ['toyota', 'honda', 'ford', 'subaru', 'chevrolet', 'chevy', 'nissan', 'hyundai', 'kia', 'mazda', 'jeep', 'ram', 'gmc', 'bmw', 'lexus',
+  'volkswagen', 'vw', 'audi', 'mercedes', 'tesla', 'dodge', 'chrysler', 'buick', 'cadillac', 'acura', 'infiniti', 'volvo', 'mitsubishi'];
+
+// Closest competitors for a business: same brand first, then same vehicle class, then the rest of its category, same market.
+function rivalsFor(name, limit = 4) {
+  const mine = dealOf(name) || CREATIVES.find((c) => c.advertiser === name);
+  if (!mine) return [];
+  const make = MAKES.find((m) => name.toLowerCase().split(/\W+/).includes(m));
+  const body = mine.auto?.body;
+  const pool = [...new Set(CREATIVES.filter((c) => c.category === mine.category && c.advertiser !== name
+    && (!mine.market || !c.market || c.market === mine.market)).map((c) => c.advertiser))];
+  const rank = (n) => (make && n.toLowerCase().split(/\W+/).includes(make) ? 0 : body && dealOf(n)?.auto?.body === body ? 1 : 2);
+  return pool.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b)).slice(0, limit);
+}
+
 // Momentum: are they buying more or less airtime than last week, and is their deal getting richer?
 function momentumOf(name) {
   const w = weekOverWeek([name])[0];
@@ -267,6 +284,17 @@ export default function App() {
 
   const toggleWatch = (name) =>
     setWatchlist((w) => (w.includes(name) ? w.filter((x) => x !== name) : [...w, name]));
+  // Set "you" once at the top and the whole app follows: market, competitors, website deals.
+  const chooseMe = (name) => {
+    setMe(name);
+    const c = dealOf(name) || CREATIVES.find((x) => x.advertiser === name);
+    if (c) {
+      if (c.market) setMarket(c.market);
+      setCategory('All'); setCity('All'); setQuery('');
+      setWatchlist(rivalsFor(name));
+    }
+    if (WEB_SITES.some((s) => s.dealer === name)) save('ri.webme', name);
+  };
   const notify = (text, sub) => setToast({ kind: 'info', text, sub });
   const showAdvertiser = (name) => {
     setQuery(name);
@@ -279,7 +307,7 @@ export default function App() {
 
   return (
     <div className="ri-app">
-      <Header live={live} setLive={setLive} />
+      <Header live={live} setLive={setLive} me={me} chooseMe={chooseMe} watchCount={watchlist.filter((n) => n !== me).length} />
 
       {toast && (
         <div className={`ri-toast ${toast.kind}`} role="status">
@@ -322,7 +350,45 @@ export default function App() {
 
 // ------------------------------------------------------------------ chrome
 
-function Header({ live, setLive }) {
+// "You are": type your business once. Suggestions cover every business we know; a website address works too.
+function MeBar({ me, chooseMe, watchCount }) {
+  const [text, setText] = useState(me);
+  useEffect(() => setText(me), [me]);
+  const match = (t) => {
+    const s = t.trim().toLowerCase();
+    if (!s) return null;
+    const dom = s.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
+    return ALL_NAMES.find((n) => n.toLowerCase() === s) || WEB_SITES.find((x) => x.domain === dom)?.dealer || null;
+  };
+  const onChange = (e) => {
+    setText(e.target.value);
+    const m = match(e.target.value);
+    if (m && m !== me) chooseMe(m);
+  };
+  const submit = (e) => {
+    e.preventDefault();
+    const name = match(text) || text.trim();
+    if (name && name !== me) chooseMe(name);
+    e.target.querySelector('input')?.blur();
+  };
+  const c = dealOf(me) || CREATIVES.find((x) => x.advertiser === me);
+  const site = WEB_SITES.find((s) => s.dealer === me);
+  const status = c
+    ? `${c.category} · ${c.market || 'all markets'} · comparing with ${watchCount} competitor${watchCount === 1 ? '' : 's'}`
+    : site ? 'Not heard on air yet · real website deals on the Websites tab'
+      : 'No ads heard yet. We start watching the moment you add a business.';
+  return (
+    <form className="ri-mebar" onSubmit={submit} role="search">
+      <label htmlFor="ri-me-input">You are</label>
+      <input id="ri-me-input" type="search" list="ri-all-names" value={text} onChange={onChange} onFocus={(e) => e.target.select()}
+        placeholder="Type your business or website" autoComplete="off" enterKeyHint="go" />
+      <datalist id="ri-all-names">{ALL_NAMES.map((n) => <option key={n} value={n} />)}</datalist>
+      <span className="ri-mebar-status">{status}</span>
+    </form>
+  );
+}
+
+function Header({ live, setLive, me, chooseMe, watchCount }) {
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
     const id = setInterval(() => setClock(new Date()), 1000);
@@ -346,6 +412,7 @@ function Header({ live, setLive }) {
           <span className="dot" />{live ? 'Live' : 'Paused'}
         </button>
       </div>
+      <MeBar me={me} chooseMe={chooseMe} watchCount={watchCount} />
     </header>
   );
 }
@@ -545,8 +612,7 @@ function BeatBanner({ me, watchlist, toggleWatch }) {
 
 function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo, me, setMe }) {
   const [chart, setChart] = useState(null);
-  // "You" can be any company on air. Rivals to add: same category, same market as you.
-  const names = [...new Set([me, ...CREATIVES.filter((c) => c.auto).map((c) => c.advertiser), ...events.map((d) => d.creative.advertiser)])].sort();
+  // "You" is set in the bar at the top. Rivals to add: same category, same market as you.
   const meCreative = dealOf(me) || CREATIVES.find((c) => c.advertiser === me);
   const rivals = meCreative
     ? [...new Set(CREATIVES.filter((c) => c.category === meCreative.category && c.advertiser !== me
@@ -555,12 +621,6 @@ function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo, me, 
     : [];
   const pickers = (
     <>
-      <label className="ri-me-pick">
-        <span>You are</span>
-        <select value={me} onChange={(e) => setMe(e.target.value)}>
-          {names.map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
-      </label>
       {rivals.length > 0 && (
         <label className="ri-add-rival">
           <span>Compare with</span>
@@ -1064,6 +1124,7 @@ function AutoBoard({ offers, market, onAdvertiser, me }) {
           <option value="city">Sort: city A–Z</option>
         </select>
       </div>
+      <p className="ri-note">Every dealer with a lease ad on air, ranked. <span className="ri-vs-badge them">⚠ red</span> = their deal beats <b>{me}</b>’s, <span className="ri-vs-badge you">✓ green</span> = yours is better. Change “You are” at the top to compare as someone else.</p>
       <p className="muted small">True monthly cost adds the money due at signing, spread over the term. It is the fair way to compare a "$0 down" deal with a "$299/mo" deal.</p>
       {leases.length === 0 && <p className="ri-empty">No lease deals match. Try another market or body style.</p>}
       <ol className="ri-board">
@@ -1756,7 +1817,6 @@ function MixView({ crossMedia, market, category, me, setMe, onAdvertiser }) {
   const single = rows.filter((r) => r.on.length === 1).slice(0, 8);
   const mkt = CHANNELS.reduce((o, c) => ({ ...o, [c.id]: rows.reduce((a, r) => a + r.v[c.id], 0) }), {});
   const mktTotal = CHANNELS.reduce((a, c) => a + mkt[c.id], 0) || 1;
-  const names = [...new Set([me, ...rows.map((r) => r.name)])].sort();
 
   return (
     <>
@@ -1775,11 +1835,7 @@ function MixView({ crossMedia, market, category, me, setMe, onAdvertiser }) {
       <div className="ri-mix-cols">
         <div className="ri-col">
           <div className="ri-section-head"><h2>Your footprint</h2>
-            <label className="ri-you-pick">You are{' '}
-              <select value={me} onChange={(e) => setMe(e.target.value)} aria-label="Your business">
-                {names.map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </label>
+            <span className="ri-you-pick">You: <b>{me}</b></span>
           </div>
           <div className="ri-panel">
             {mine ? (

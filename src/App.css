@@ -80,6 +80,15 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
   background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
+.ri-header { flex-wrap: wrap; row-gap: 10px; }
+.ri-mebar { flex: 1 1 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 10px; row-gap: 4px; }
+.ri-mebar label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.ri-mebar input {
+  min-width: 0; width: 100%; font: inherit; font-size: 1rem; font-weight: 700; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; padding: 9px 12px;
+}
+.ri-mebar input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ri-mebar-status { grid-column: 2; font-size: 0.75rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ri-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ri-logo { width: 30px; height: 30px; color: var(--accent); flex: none; }
 .ri-brand h1 { font-family: var(--font-display); font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; margin: 0; line-height: 1.1; }
