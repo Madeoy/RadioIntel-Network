@@ -1402,11 +1402,14 @@ function DetailSheet({ d, onClose, watched, toggleWatch, notify, me, events }) {
           {meta.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
         </dl>
 
-        <div className="ri-sheet-actions">
-          <button type="button" className={`ri-btn watch ${watched ? 'on' : ''}`} onClick={() => toggleWatch(c.advertiser)} aria-pressed={watched}>
-            {watched ? '★ Watching · tap to stop' : `☆ Watch ${c.advertiser}`}
+        {/* Pinned to the bottom of the sheet: watch, copy and close without scrolling. */}
+        <div className="ri-sheet-actions ri-dock">
+          <button type="button" className={`ri-btn watch ${watched ? 'on' : ''}`} onClick={() => toggleWatch(c.advertiser)} aria-pressed={watched}
+            title={watched ? `Stop watching ${c.advertiser}` : `Watch ${c.advertiser}`}>
+            {watched ? '★ Watching' : '☆ Watch'}
           </button>
-          <button type="button" className="ri-btn primary" onClick={copyRow}>Copy row for Sheets</button>
+          <button type="button" className="ri-btn primary" onClick={copyRow}>Copy for Sheets</button>
+          <button type="button" className="ri-btn" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

@@ -910,3 +910,15 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-hour-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ri-hour-head b { color: var(--accent); }
 .ri-hour-note { font-size: 0.85rem; color: var(--muted); }
+
+/* Ad sheet: actions pinned to the bottom so you never scroll to watch, copy or close */
+.ri-dock {
+  position: sticky; bottom: calc(-20px - env(safe-area-inset-bottom, 0px)); z-index: 2;
+  flex-wrap: nowrap; margin: 4px -18px calc(-20px - env(safe-area-inset-bottom, 0px));
+  padding: 10px 18px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface); border-top: 1px solid var(--line-strong);
+  box-shadow: 0 -8px 16px rgba(0, 0, 0, 0.35);
+}
+.ri-dock .ri-btn { flex: 1 1 0; min-width: 0; padding: 11px 8px; white-space: nowrap; }
+.ri-dock .ri-btn.primary { flex-grow: 1.45; }
+@media (max-width: 420px) { .ri-dock .ri-btn { font-size: 0.85rem; padding: 11px 4px; } }
