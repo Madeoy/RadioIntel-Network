@@ -2333,7 +2333,7 @@ function HeadToHead({ events, home, hours, onAdvertiser }) {
           <div><dt>On both</dt><dd>{both.length} advertisers</dd></div>
           <div><dt>Only on {home.call}</dt><dd>{onlyMe.length}</dd></div>
           <div className="wide"><dt>Only on {rival.call}: pitch them</dt><dd>{onlyThem.length ? onlyThem.slice(0, 6).map((a, i) => (
-            <React.Fragment key={a}>{i ? ', ' : ''}<button type="button" className="ri-link" onClick={() => onAdvertiser(a)}>{a}</button></React.Fragment>
+            <React.Fragment key={a}>{i ? ', ' : ''}<b>{a}</b></React.Fragment>
           )) : 'None'}</dd></div>
         </dl>
       </div>
@@ -2380,7 +2380,7 @@ function MyStation({ events, home, hours, now, peers, rank, onAdvertiser, onOpen
           <ul>
             {atRisk.map((r) => (
               <li key={r.name}>
-                <button type="button" className="ri-link nm" onClick={() => onAdvertiser(r.name)}>{r.name}</button>
+                <b className="nm">{r.name}</b>
                 <span className="muted">Spots on {home.call} {pct(r.onYou)} vs last week, while their total airtime is {pct(r.overall)}.</span>
                 <span className="gap">Call them before it shrinks further.</span>
               </li>
@@ -2394,7 +2394,7 @@ function MyStation({ events, home, hours, now, peers, rank, onAdvertiser, onOpen
         {(all ? advs : advs.slice(0, 12)).map((r) => (
           <li key={r.name} className={r.atRisk ? 'risk' : ''}>
             <div className="top">
-              <button type="button" className="ri-link" onClick={() => onAdvertiser(r.name)}>{r.name}</button>
+              <b>{r.name}</b>
               <b>{money(r.spend)}</b>
             </div>
             <p className="offer">{r.offer}</p>
@@ -2527,7 +2527,7 @@ function StationsView({ events, now, onAdvertiser, onOpen }) {
         {leads.slice(0, 12).map((l) => (
           <li key={l.name}>
             <div className="top">
-              <button type="button" className="ri-link" onClick={() => onAdvertiser(l.name)}>{l.name}</button>
+              <b>{l.name}</b>
               <b>{money(l.spend)}</b>
             </div>
             <p className="offer">{l.offer}</p>
@@ -2552,7 +2552,7 @@ function StationsView({ events, now, onAdvertiser, onOpen }) {
             {tvOnly.map((l) => (
               <li key={l.name}>
                 <div className="top">
-                  <button type="button" className="ri-link" onClick={() => onAdvertiser(l.name)}>{l.name}</button>
+                  <b>{l.name}</b>
                   <b>{money(l.spend)}</b>
                 </div>
                 <p className="offer">{l.offer}</p>
