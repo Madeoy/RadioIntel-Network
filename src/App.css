@@ -113,6 +113,8 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-combo-opt .meta { font-size: 0.75rem; color: var(--muted); }
 .ri-combo-opt.hi { background: var(--accent-soft); }
 .ri-combo-opt.cur .nm::after { content: ' ✓'; color: var(--accent); }
+.ri-combo-opt.none { border-bottom: 1px solid var(--line, rgba(127,127,127,.25)); border-radius: 8px 8px 0 0; margin-bottom: 4px; }
+.ri-combo-opt.none .nm { font-weight: 600; color: var(--muted); }
 .ri-combo-empty { padding: 12px 10px; color: var(--muted); font-size: 0.85rem; }
 .ri-mebar input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .ri-mebar-status { grid-column: 2; font-size: 0.75rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
