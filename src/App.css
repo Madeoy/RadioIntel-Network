@@ -200,6 +200,44 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
   .ri-selects select.city { grid-column: auto; }
 }
 
+/* "Where this lands" panel at the top of an ad */
+.ri-land { display: flex; flex-direction: column; gap: 8px; padding: 12px; margin: 4px 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: rgba(255, 255, 255, 0.025); }
+.ri-land p { margin: 0; }
+.ri-land-verdict { font-family: var(--font-display); font-size: 1.05rem; font-weight: 800; }
+.ri-land-verdict.them { color: var(--danger); }
+.ri-land-verdict.you { color: var(--accent); }
+.ri-land-verdict.even, .ri-land-verdict.me { color: var(--fg); }
+.ri-land-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ri-land-vs > div { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); min-width: 0; }
+.ri-land-vs > div.mine { border-color: rgba(0, 229, 153, 0.35); }
+.ri-land-vs .who { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ri-land-vs b { font-size: 1.05rem; }
+.ri-land-vs span:not(.who) { font-size: 0.78rem; color: var(--muted); }
+.ri-land-rank, .ri-land-air, .ri-land-note { font-size: 0.84rem; color: var(--muted); }
+.ri-land-rank b, .ri-land-air b { color: var(--fg); }
+.ri-land-move, .ri-land-say { display: flex; flex-direction: column; gap: 3px; font-size: 0.88rem; line-height: 1.45; }
+.ri-land-say { font-style: italic; color: var(--fg); padding-left: 10px; border-left: 2px solid var(--accent); }
+.ri-land-say .ri-eyebrow { font-style: normal; }
+
+/* Websites: your rankings + ranked boards */
+.ri-ranks { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ri-ranks button {
+  width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; font: inherit; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--danger); border-radius: 10px; padding: 9px 12px; cursor: pointer;
+}
+.ri-ranks button.win { border-left-color: var(--accent); }
+.ri-ranks .pos { flex: none; width: 46px; display: flex; flex-direction: column; font-family: var(--font-display); font-size: 1.25rem; font-weight: 800; line-height: 1; }
+.ri-ranks .win .pos { color: var(--accent); }
+.ri-ranks .lose .pos { color: var(--danger); }
+.ri-ranks .pos small { font-size: 0.62rem; font-weight: 600; color: var(--muted); margin-top: 3px; }
+.ri-ranks .what { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
+.ri-ranks .ty { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.ri-ranks .det { flex-basis: 100%; font-size: 0.8rem; color: var(--muted); }
+.ri-rankline { margin: 4px 0 2px; font-size: 0.86rem; color: var(--muted); }
+.ri-rankline b { color: var(--fg); }
+.ri-wrows .rk { display: inline-block; min-width: 26px; margin-right: 6px; font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
+.ri-best-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); vertical-align: 2px; }
+
 /* compact filters (Live tab) */
 .ri-quick { display: flex; gap: 8px; }
 .ri-quick input {

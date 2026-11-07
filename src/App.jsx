@@ -327,7 +327,7 @@ export default function App() {
         {tab === 'trends' && (
           <TrendsView events={filtered} crossMedia={crossMedia} allEvents={events} watchlist={watchlist} toggleWatch={toggleWatch} onAdvertiser={showAdvertiser} me={me} {...filterProps} />
         )}
-        {tab === 'web' && <WebDealsView />}
+        {tab === 'web' && <WebDealsView me={me} chooseMe={chooseMe} />}
         {tab === 'mix' && <MixView crossMedia={crossMedia} market={market} category={category} me={me} setMe={setMe} onAdvertiser={showAdvertiser} />}
         {tab === 'stations' && <StationsView events={events} now={now} onAdvertiser={showAdvertiser} onOpen={setSelected} />}
         {tab === 'export' && (
@@ -341,7 +341,7 @@ export default function App() {
 
       {selected && (
         <DetailSheet d={selected} onClose={() => setSelected(null)} watched={watchlist.includes(selected.creative.advertiser)}
-          toggleWatch={toggleWatch} notify={notify} />
+          toggleWatch={toggleWatch} notify={notify} me={me} events={events} />
       )}
     </div>
   );
@@ -971,7 +971,111 @@ function HearIt({ text }) {
   );
 }
 
-function DetailSheet({ d, onClose, watched, toggleWatch, notify }) {
+// Every car deal on air in a market, best first: lowest true monthly (lease) or most cash off.
+function rankBoard(market, kind) {
+  const names = [...new Set(CREATIVES.filter((c) => c.auto && c.market === market).map((c) => c.advertiser))];
+  return names.map((n) => ({ n, a: dealOf(n).auto }))
+    .filter((x) => (kind === 'lease' ? x.a.monthly : x.a.cashOff))
+    .sort((p, q) => (kind === 'lease' ? trueMonthly(p.a) - trueMonthly(q.a) : q.a.cashOff - p.a.cashOff));
+}
+
+// "So what?" for any ad: where it lands against the business in "Insights on".
+// Facts from the ads only (price, airtime, rank). Never a guess about anyone's profit.
+function WhereItLands({ d, me, events }) {
+  const c = d.creative;
+  const isMe = c.advertiser === me;
+  const mine = dealOf(me);
+  const meC = mine || CREATIVES.find((x) => x.advertiser === me);
+  const airs = events.filter((e) => e.creative.advertiser === c.advertiser);
+  const stations = new Set(airs.map((e) => e.station.id)).size;
+  const spend = airs.reduce((s, e) => s + e.estCost, 0);
+  const myAirs = events.filter((e) => e.creative.advertiser === me).length;
+  const air = (
+    <p className="ri-land-air">
+      <b>{airs.length}</b> spot{airs.length === 1 ? '' : 's'} on <b>{stations}</b> station{stations === 1 ? '' : 's'} in the {PERIOD} · est. {money(spend)}
+      {!isMe && meC && <> · {me}: <b>{myAirs}</b></>}
+    </p>
+  );
+  const shell = (body) => (
+    <section className="ri-land" aria-label={`Where this lands vs ${me}`}>
+      <span className="ri-eyebrow">Where this lands vs {isMe ? 'the market' : me}</span>
+      {body}
+      {air}
+    </section>
+  );
+
+  if (!c.auto) {
+    const same = meC && meC.category === c.category;
+    return shell(<p className="ri-land-note">{same
+      ? <>Same category as {me}. Deal-vs-deal pricing covers car dealers for now; compare airtime below.</>
+      : <>Not a {meC ? meC.category.toLowerCase() : ''} competitor of {me}. Shown for the full picture of who's on air.</>}</p>);
+  }
+
+  const market = c.market || d.station.market;
+  const kind = c.auto.monthly ? 'lease' : 'cash';
+  const board = rankBoard(market, kind);
+  const pos = board.findIndex((x) => x.n === c.advertiser) + 1;
+  const myPos = board.findIndex((x) => x.n === me) + 1;
+  const label = kind === 'lease' ? 'lease deals' : 'cash-off deals';
+  const rank = pos > 0 && (
+    <p className="ri-land-rank">
+      <b>#{pos}</b> of {board.length} {label} on air in {market}{kind === 'lease' ? ' (true monthly cost)' : ''}
+      {!isMe && (myPos ? <> · {me} is <b>#{myPos}</b></> : '')}
+    </p>
+  );
+
+  if (isMe) return shell(<><p className="ri-land-verdict me">This is {me}'s ad.</p>{rank}</>);
+
+  const cmp = compareDeals(c.advertiser, me);
+  if (!cmp) {
+    const why = !mine ? `${me} has no car deal on air to compare yet.`
+      : mine.market !== market ? `${me} advertises in ${mine.market}; this ad runs in ${market}.`
+        : `Different kind of deal (${kind === 'lease' ? 'lease' : 'cash off'} vs ${mine.auto.monthly ? 'lease' : 'cash off'}), so not a straight price match.`;
+    return shell(<>{rank}<p className="ri-land-note">Not a head-to-head: {why}</p></>);
+  }
+
+  const lease = !!cmp.them.tru;
+  const ya = mine.auto;
+  const dueCut = lease ? Math.round((cmp.gap * (ya.term || 36)) / 50) * 50 : 0;
+  const fit = cmp.sameBody ? `Same class (${c.auto.body}) as ${me}'s ${ya.vehicle}.`
+    : `Different class (${c.auto.body} vs ${ya.body}), so shoppers may not cross-shop. Judge the fit.`;
+  let verdict; let move;
+  if (cmp.status === 'them') {
+    verdict = <p className="ri-land-verdict them">⚠ Beats {me} by {lease ? `${money(cmp.gap)}/mo` : `${money(cmp.gap)} off`}</p>;
+    move = lease
+      ? <>To match on true monthly cost, {me} would need about <b>{money(cmp.gap)}/mo</b> off the payment, or about <b>{money(dueCut)}</b> less due at signing.</>
+      : <>To match, {me} would need about <b>{money(cmp.gap)}</b> more off.</>;
+  } else if (cmp.status === 'you') {
+    verdict = <p className="ri-land-verdict you">✓ {me}'s deal is better by {lease ? `${money(cmp.gap)}/mo` : `${money(cmp.gap)} off`}</p>;
+    move = myAirs < airs.length
+      ? <>{me} wins on price but they're out-airing you <b>{airs.length} to {myAirs}</b>. The better deal only wins if shoppers hear it.</>
+      : <>{me} wins on price and on airtime. Keep the offer on air through the weekend.</>;
+  } else {
+    verdict = <p className="ri-land-verdict even">≈ About even with {me}</p>;
+    move = <>Price is a wash, so airtime decides: they aired <b>{airs.length}</b>, {me} aired <b>{myAirs}</b>.</>;
+  }
+  const say = cmp.status === 'them'
+    ? `"Right now ${c.advertiser} is on ${d.station.call} with a ${cmp.them.veh} at ${cmp.them.big}${lease ? ` (${cmp.them.tru})` : ''}. That's ${lease ? `${money(cmp.gap)} a month` : money(cmp.gap)} better than yours, and payment shoppers hear it before they hear you."`
+    : cmp.status === 'you'
+      ? `"Your ${cmp.you.veh} deal beats ${c.advertiser}'s. They've run ${airs.length} spots in the ${PERIOD}${myAirs < airs.length ? ` to your ${myAirs}` : ''}. The better deal should be the louder one."`
+      : `"You and ${c.advertiser} are priced the same. Whoever's on air more gets the call."`;
+
+  return shell(
+    <>
+      {verdict}
+      <div className="ri-land-vs">
+        <div><span className="who">{c.advertiser}</span><b>{cmp.them.big}</b><span>{cmp.them.veh}</span>{cmp.them.tru && <span>{cmp.them.tru}</span>}</div>
+        <div className="mine"><span className="who">{me}</span><b>{cmp.you.big}</b><span>{cmp.you.veh}</span>{cmp.you.tru && <span>{cmp.you.tru}</span>}</div>
+      </div>
+      {rank}
+      <p className="ri-land-note">{fit}</p>
+      <p className="ri-land-move"><span className="ri-eyebrow">Suggested move</span><span>{move}</span></p>
+      <p className="ri-land-say"><span className="ri-eyebrow">Say it like this</span><span>{say}</span></p>
+    </>,
+  );
+}
+
+function DetailSheet({ d, onClose, watched, toggleWatch, notify, me, events }) {
   const c = d.creative;
   const o = c.offer;
   const a = c.auto;
@@ -1030,6 +1134,8 @@ function DetailSheet({ d, onClose, watched, toggleWatch, notify }) {
           </div>
           <button type="button" className="ri-close" onClick={onClose} aria-label="Close">×</button>
         </div>
+
+        {me && <WhereItLands d={d} me={me} events={events || []} />}
 
         <div className={`ri-offer-block ${o.offerType === 'Brand' ? 'brand' : ''}`}>
           <span className="ri-eyebrow">Extracted offer</span>
@@ -1594,11 +1700,15 @@ function vsMine(o, mine, type) {
   return gap > 0 ? { status: 'them', short: `${money(gap)} more off than you` } : { status: 'you', short: `You take ${money(-gap)} more off` };
 }
 
-function WebDealsView() {
-  const [q, setQ] = useState(() => store('ri.webme', "Michael's Toyota of Bellevue"));
-  const site = findSite(q);
-  useEffect(() => { if (site) save('ri.webme', site.dealer); }, [site]);
+// Website deal value, as shown on a ranking row.
+const wVal = (o, type) => (type === 'lease' ? `${money(wTrue(o))}/mo true` : `${money(wOff(o))} off`);
+const wGap = (mine, best, type) => (type === 'lease' ? Math.round(wTrue(mine) - wTrue(best)) : wOff(best) - wOff(mine));
+
+// The dealer comes from "Insights on" at the top, so the whole app looks at one business.
+function WebDealsView({ me: meName, chooseMe }) {
+  const site = WEB_SITES.find((s) => s.dealer === meName) || null;
   const me = site ? site.dealer : null;
+  const boardRef = useRef(null);
   const mine = WEB_OFFERS.filter((o) => o.dealer === me);
   const rivals = WEB_OFFERS.filter((o) => o.dealer !== me);
   const myKeys = [...new Set(mine.map(wKey))];
@@ -1614,23 +1724,27 @@ function WebDealsView() {
     const myLeases = mine.filter((o) => o.type === 'lease').length;
     const leaseRivals = new Set(rivals.filter((o) => o.type === 'lease').map((o) => o.dealer));
     if (mine.length && !myLeases && leaseRivals.size) notes.push({ kind: 'miss', text: <><b>{leaseRivals.size} competitors</b> post monthly lease payments. You post none, so payment shoppers compare them, not you.</> });
-    for (const k of myKeys) {
-      for (const type of ['lease', 'price']) {
-        const myBest = bestPerDealer(mine.filter((o) => wKey(o) === k), type)[0];
-        if (!myBest) continue;
-        const top = bestPerDealer(rivals.filter((o) => wKey(o) === k), type)[0];
-        const cmp = top && vsMine(top, myBest, type);
-        if (cmp && cmp.status === 'them') {
-          notes.push({ kind: 'beat', k, text: type === 'lease'
-            ? <><b>{top.dealer}</b> leases a {wName(k)} for {money(top.monthly)}/mo with {money(top.due)} due ({money(wTrue(top))}/mo true cost). Yours: {money(wTrue(myBest))}/mo.</>
-            : <><b>{top.dealer}</b> takes <b>{money(wOff(top))}</b> off a {wName(k)}. Your best is {money(wOff(myBest))} off.</> });
-        }
-      }
-    }
     const theirOnly = [...new Set(rivals.map((o) => o.model))].filter((m) => !mine.some((o) => o.model === m));
     if (mine.length && theirOnly.length) notes.push({ kind: 'open', text: <>Competitors post specials on <b>{theirOnly.length} models you don't</b>: {theirOnly.slice(0, 6).join(', ')}{theirOnly.length > 6 ? '…' : ''}.</> });
   }
-  const beatCount = notes.filter((n) => n.kind === 'beat').length;
+  // Your rankings: for every vehicle you post, where your best deal ranks among every dealer posting it.
+  const ranks = [];
+  if (me) {
+    for (const k of myKeys) {
+      for (const type of ['lease', 'price']) {
+        const ranked = bestPerDealer(WEB_OFFERS.filter((o) => wKey(o) === k), type);
+        const r = ranked.findIndex((o) => o.dealer === me);
+        if (r < 0) continue;
+        ranks.push({ k, type, rank: r + 1, of: ranked.length, mine: ranked[r], best: ranked[0] });
+      }
+    }
+    ranks.sort((a, b) => a.rank - b.rank || b.of - a.of || a.k.localeCompare(b.k));
+  }
+  // Only real head-to-heads get a row: 2+ dealers posting, and for price at least someone discounting.
+  const h2h = ranks.filter((x) => x.of > 1 && !(x.type === 'price' && wOff(x.best) === 0));
+  const solo = [...new Set(ranks.filter((x) => x.of === 1 && (x.type === 'lease' || wOff(x.mine) > 0)).map((x) => wName(x.k)))];
+  const beatCount = ranks.filter((x) => x.rank > 1 && wGap(x.mine, x.best, x.type) > (x.type === 'lease' ? 4 : 249)).length;
+  const goBoard = (k) => { setPick(k); setTimeout(() => boardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30); };
 
   const list = WEB_OFFERS.filter((o) => wKey(o) === sel);
   const leases = bestPerDealer(list, 'lease');
@@ -1642,21 +1756,55 @@ function WebDealsView() {
   return (
     <>
       <div className="ri-section-head"><h2>Website deals</h2><span className="ri-real">Real data · read {wWhen}</span></div>
-      <p className="ri-note">Every new-Toyota special posted on Seattle-area dealer websites, read the way any shopper sees them. Type your dealership or your website.</p>
-      <div className="ri-filters">
-        <input type="search" list="ri-web-dealers" placeholder="Your dealership or website, e.g. toyotaofbellevue.com" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Your dealership or website" />
-        <datalist id="ri-web-dealers">{WEB_SITES.map((s) => <option key={s.dealer} value={s.dealer} />)}</datalist>
-      </div>
+      <p className="ri-note">Every new-Toyota special posted on Seattle-area dealer websites, read the way any shopper sees them, then ranked best deal first.</p>
 
-      {!site && q.trim() && <p className="ri-callout">We don't have “{q}” yet. In the live product, tracking starts the moment you add it. Try a Seattle-area Toyota store.</p>}
+      {!site && (
+        <div className="ri-panel">
+          <p className="ri-callout">“Insights on” is set to <b>{meName}</b>. We don't read a website for them yet. In the live product, reading starts the moment you add a dealer. Pick one we read:</p>
+          <div className="ri-chips">
+            {WEB_SITES.filter((s) => s.status === 'read').map((s) => (
+              <button key={s.dealer} type="button" className="ri-chip" onClick={() => { chooseMe(s.dealer); window.scrollTo({ top: 0 }); }}>{s.dealer}</button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {site && (
         <div className="ri-panel">
           <p className="ri-callout">
             <b>{site.dealer}</b> · {site.city}{site.group && <> · {site.group} group</>} · <a href={site.url} target="_blank" rel="noreferrer">{site.domain}</a>
             <br />{site.status === 'blocked' ? 'Your site blocks automated reading, so we compare you using your Google and Facebook ads instead (coming next).'
-              : <>You post <b>{mine.length}</b> new-vehicle specials: {mine.filter((o) => o.type === 'lease').length} lease payments, {mine.filter((o) => o.type === 'price').length} price discounts.{beatCount > 0 && <> <b>{beatCount}</b> of your vehicles are beaten by a competitor's posted deal.</>}</>}
+              : <>You post <b>{mine.length}</b> new-vehicle specials: {mine.filter((o) => o.type === 'lease').length} lease payments, {mine.filter((o) => o.type === 'price').length} price discounts.{beatCount > 0 && <> On <b>{beatCount}</b> of them a competitor posts a better deal.</>}</>}
           </p>
+          {h2h.length > 0 && (
+            <>
+              <span className="ri-eyebrow">Your rankings vs other dealers · best first · tap to see the board</span>
+              <ol className="ri-ranks">
+                {h2h.map((x) => {
+                  const gap = wGap(x.mine, x.best, x.type);
+                  const top = x.rank === 1;
+                  return (
+                    <li key={x.k + x.type}>
+                      <button type="button" className={top ? 'win' : 'lose'} onClick={() => goBoard(x.k)}>
+                        <span className="pos">#{x.rank}<small>of {x.of}</small></span>
+                        <span className="what">
+                          <b>{wName(x.k)}</b> <span className="ty">{x.type === 'lease' ? 'Lease' : 'Price'}</span>
+                          <span className="det">
+                            You: {wVal(x.mine, x.type)}
+                            {top ? ' · best deal posted'
+                              : <> · best: {x.best.dealer}, {x.type === 'lease' ? `${money(gap)}/mo cheaper` : `${money(gap)} more off`}</>}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            </>
+          )}
+          {solo.length > 0 && (
+            <p className="ri-rankline">Only you post a special on <b>{solo.length}</b>: {solo.slice(0, 6).join(', ')}{solo.length > 6 ? '…' : ''}. No one to rank against yet.</p>
+          )}
           {notes.length > 0 && (
             <ul className="ri-lanes">
               {notes.map((n, i) => (
@@ -1670,7 +1818,7 @@ function WebDealsView() {
         </div>
       )}
 
-      <div className="ri-section-head"><h2>Same vehicle, every dealer</h2><span className="ri-count">{keys.length} vehicles · {WEB_OFFERS.length} specials</span></div>
+      <div className="ri-section-head" ref={boardRef}><h2>Same vehicle, every dealer, ranked</h2><span className="ri-count">{keys.length} vehicles · {WEB_OFFERS.length} specials</span></div>
       <div className="ri-wchips" role="tablist" aria-label="Vehicle">
         {keys.map((x) => (
           <button key={x.k} type="button" role="tab" aria-selected={x.k === sel} className={x.k === sel ? 'on' : ''} onClick={() => setPick(x.k)}>
@@ -1681,13 +1829,14 @@ function WebDealsView() {
 
       {leases.length > 0 && (
         <div className="ri-panel">
-          <span className="ri-eyebrow">{wName(sel)} · lease, sorted by true monthly cost</span>
+          <span className="ri-eyebrow">{wName(sel)} · lease, best true monthly cost first</span>
+          {myLease && <p className="ri-rankline">{me} ranks <b>#{leases.indexOf(myLease) + 1} of {leases.length}</b> on this lease.</p>}
           <ul className="ri-wrows">
-            {leases.map((o) => {
+            {leases.map((o, i) => {
               const cmp = vsMine(o, myLease, 'lease');
               return (
                 <li key={o.dealer} className={o.dealer === me ? 'me' : ''}>
-                  <div className="top"><span className="name">{o.dealer}{o.dealer === me && <span className="ri-you-tag">You</span>}</span><b>{money(o.monthly)}/mo</b></div>
+                  <div className="top"><span className="name"><span className="rk">#{i + 1}</span>{o.dealer}{o.dealer === me && <span className="ri-you-tag">You</span>}{i === 0 && leases.length > 1 && <span className="ri-best-tag">Best deal</span>}</span><b>{money(o.monthly)}/mo</b></div>
                   <div className="sub"><span>{money(o.due)} due · {o.term} mo</span><span>{money(wTrue(o))}/mo true cost</span>{o.drive && <span>{o.drive}</span>}{o.modelCode && <span>Model {o.modelCode}</span>}<span>Ends {o.expires}</span></div>
                   <div className="sub">{cmp && <VsBadge cmp={cmp} />}<a href={siteOf(o.dealer).url} target="_blank" rel="noreferrer">See it on their site</a></div>
                 </li>
@@ -1700,13 +1849,14 @@ function WebDealsView() {
 
       {prices.length > 0 && (
         <div className="ri-panel">
-          <span className="ri-eyebrow">{wName(sel)} · price, sorted by most off sticker</span>
+          <span className="ri-eyebrow">{wName(sel)} · price, most off sticker first</span>
+          {myPrice && <p className="ri-rankline">{me} ranks <b>#{prices.indexOf(myPrice) + 1} of {prices.length}</b> on price.</p>}
           <ul className="ri-wrows">
-            {prices.map((o) => {
+            {prices.map((o, i) => {
               const cmp = vsMine(o, myPrice, 'price');
               return (
                 <li key={o.dealer} className={o.dealer === me ? 'me' : ''}>
-                  <div className="top"><span className="name">{o.dealer}{o.dealer === me && <span className="ri-you-tag">You</span>}</span><b>{money(wOff(o))} off</b></div>
+                  <div className="top"><span className="name"><span className="rk">#{i + 1}</span>{o.dealer}{o.dealer === me && <span className="ri-you-tag">You</span>}{i === 0 && prices.length > 1 && <span className="ri-best-tag">Best deal</span>}</span><b>{money(wOff(o))} off</b></div>
                   <div className="sub"><span>Sticker {money(o.tsrp)}</span><span>{Math.round((wOff(o) / (o.tsrp || 1)) * 1000) / 10}% off</span>{o.price && <span>Posted price {money(o.price)}</span>}{o.drive && <span>{o.drive}</span>}<span>Ends {o.expires}</span></div>
                   <div className="sub">{cmp && <VsBadge cmp={cmp} />}<a href={siteOf(o.dealer).url} target="_blank" rel="noreferrer">See it on their site</a></div>
                 </li>
