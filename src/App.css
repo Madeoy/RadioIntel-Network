@@ -398,12 +398,17 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-prices .move s { color: var(--muted); }
 .ri-prices .move b { color: var(--fg); }
 .ri-spark { flex: none; }
-.ri-spark .line { fill: none; stroke: var(--amber); stroke-width: 2; stroke-linejoin: round; }
-.ri-spark .area { fill: var(--amber-soft); }
-.ri-spark .dot { fill: var(--amber); }
-.ri-spark.better .line { stroke: var(--accent); }
-.ri-spark.better .area { fill: var(--accent-soft); }
-.ri-spark.better .dot { fill: var(--accent); }
+/* Price colors are from the CLIENT's side: "better" = the competitor's deal got richer for shoppers
+   = a threat that costs the client money → red. A weaker competitor deal → green. Own deal → neutral. */
+.ri-spark .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.ri-spark .area { fill: var(--accent-soft); }
+.ri-spark .dot { fill: var(--accent); }
+.ri-spark.better .line { stroke: var(--danger); }
+.ri-spark.better .area { fill: var(--danger-soft); }
+.ri-spark.better .dot { fill: var(--danger); }
+.ri-spark.mine .line { stroke: var(--fg); }
+.ri-spark.mine .area { fill: rgba(255, 255, 255, 0.06); }
+.ri-spark.mine .dot { fill: var(--fg); }
 .ri-wow { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .ri-wow li { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; background: var(--surface); padding: 9px 14px; align-items: baseline; }
 .ri-wow .muted { grid-column: 1 / -1; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
@@ -449,8 +454,9 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-watch-trend .lbl { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .ri-watch-trend .prod { font-size: 0.78rem; color: var(--muted); }
 .ri-watch-trend .mv { font-family: var(--font-mono); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-.ri-watch-trend .mv.better { color: var(--accent); }
-.ri-watch-trend .mv.worse { color: var(--amber); }
+.ri-watch-trend .mv.better { color: var(--danger); }
+.ri-watch-trend .mv.worse { color: var(--accent); }
+.ri-watch-trend .mv.mine { color: var(--fg); }
 .ri-watch-trend .mv b { font-weight: 700; }
 .ri-watch-trend .ri-spark { width: 100%; height: auto; }
 .ri-watch-trend .ri-spark-hint { align-self: flex-end; color: var(--accent); }
@@ -468,11 +474,13 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-vs .v { color: var(--muted); font-size: 0.8rem; }
 .ri-vs .verdict { grid-column: 1 / -1; font-size: 0.9rem; font-weight: 700; }
 .ri-vs.better .verdict { color: var(--accent); }
-.ri-vs.worse .verdict { color: var(--amber); }
+.ri-vs.worse .verdict { color: var(--danger); }
+.ri-vs.worse { border-color: rgba(255, 107, 107, 0.4); background: linear-gradient(180deg, var(--danger-soft), var(--bg)); }
 .ri-chart-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8rem; color: var(--muted); }
 .ri-chart-legend span { display: flex; align-items: center; gap: 6px; }
 .ri-chart-legend .sw { width: 18px; height: 0; border-top: 3px solid var(--accent); }
-.ri-chart-legend .sw.worse { border-top-color: var(--amber); }
+.ri-chart-legend .sw.better { border-top-color: var(--danger); }
+.ri-chart-legend .sw.worse { border-top-color: var(--accent); }
 .ri-chart-legend .sw.you { border-top: 3px dashed var(--fg); }
 .ri-chart .pline.you { stroke: var(--fg); stroke-width: 2; stroke-dasharray: 5 4; opacity: 0.85; }
 .ri-chart .pt.you { fill: var(--fg); }
@@ -484,8 +492,9 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-quote { display: flex; flex-direction: column; gap: 4px; }
 .ri-quote .now { font-family: var(--font-display); font-size: 2.2rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
 .ri-quote .chg { font-family: var(--font-mono); font-size: 0.95rem; font-weight: 500; }
-.ri-quote .chg.better { color: var(--accent); }
-.ri-quote .chg.worse { color: var(--amber); }
+.ri-quote .chg.better { color: var(--danger); }
+.ri-quote .chg.worse { color: var(--accent); }
+.ri-quote .chg.mine { color: var(--fg); }
 .ri-chart-read { margin: 0; }
 .ri-chart { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px 0; }
 .ri-chart svg { display: block; max-width: 100%; height: auto; }
@@ -493,15 +502,19 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-chart .axis { fill: var(--muted); font-family: var(--font-mono); font-size: 10px; }
 .ri-chart .cross { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 3; }
 .ri-chart .pline { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
-.ri-chart .pline.better { stroke: var(--accent); }
-.ri-chart .pline.worse { stroke: var(--amber); }
+.ri-chart .pline.better { stroke: var(--danger); }
+.ri-chart .pline.worse { stroke: var(--accent); }
+.ri-chart .pline.mine { stroke: var(--fg); }
 .ri-chart .pt { stroke: var(--bg); stroke-width: 2; }
-.ri-chart .pt.better { fill: var(--accent); }
-.ri-chart .pt.worse { fill: var(--amber); }
+.ri-chart .pt.better { fill: var(--danger); }
+.ri-chart .pt.worse { fill: var(--accent); }
+.ri-chart .pt.mine { fill: var(--fg); }
 .ri-chart .pt.sel { stroke: var(--fg); stroke-width: 2.5; }
-.ri-chart .stop-a.better { stop-color: rgba(0, 229, 153, 0.35); }
-.ri-chart .stop-a.worse { stop-color: rgba(245, 181, 68, 0.35); }
-.ri-chart .stop-b { stop-color: rgba(0, 229, 153, 0); }
+.ri-chart .stop-a.better { stop-color: rgba(255, 107, 107, 0.35); }
+.ri-chart .stop-a.worse { stop-color: rgba(0, 229, 153, 0.35); }
+.ri-chart .stop-a.mine { stop-color: rgba(255, 255, 255, 0.14); }
+.ri-chart .stop-b { stop-color: rgba(10, 10, 12, 0); }
+.ri-chart-read b { color: var(--fg); }
 .ri-chart .hit { fill: transparent; cursor: pointer; }
 .ri-weeks { min-width: 0; }
 .ri-weeks tr { cursor: pointer; }

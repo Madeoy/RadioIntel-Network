@@ -417,7 +417,7 @@ function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo }) {
         const o = w.latest?.creative.offer;
         const fresh = w.latest && now - w.latest.ts < 15 * 60000;
         const cmp = isMe ? null : compare(w);
-        const open = () => w.history && setChart({ h: w.history, mine: isMe ? null : meCard.history });
+        const open = () => w.history && setChart({ h: w.history, mine: isMe ? null : meCard.history, own: isMe });
         return (
           <li key={isMe ? `me-${w.name}` : w.name} className={`ri-watch-card ${isMe ? 'me' : fresh ? 'hot' : ''} ${w.history ? 'tappable' : ''}`}
             onClick={open}>
@@ -466,11 +466,11 @@ function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo }) {
                     <button type="button" className="ri-watch-trend" onClick={(e) => { e.stopPropagation(); open(); }} aria-label={`Open ${w.name} price chart`}>
                       <span className="lbl">
                         <span className="prod">{w.history.product} · 8 weeks</span>
-                        <span className={`mv ${better ? 'better' : last === first ? '' : 'worse'}`}>
+                        <span className={`mv ${isMe ? 'mine' : better ? 'better' : last === first ? '' : 'worse'}`}>
                           {fmt(first)} → <b>{fmt(last)}</b>
                         </span>
                       </span>
-                      <Sparkline values={v} lowerIsBetter={w.history.lowerIsBetter} w={320} h={70} />
+                      <Sparkline values={v} lowerIsBetter={w.history.lowerIsBetter} w={320} h={70} own={isMe} />
                       <span className="ri-spark-hint">{isMe || !cmp ? 'Tap for full chart ›' : 'Tap to compare on chart ›'}</span>
                     </button>
                   );
@@ -483,7 +483,7 @@ function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo }) {
         );
       })}
     </ul>
-    {chart && <PriceChartSheet h={chart.h} mine={chart.mine} onClose={() => setChart(null)} />}
+    {chart && <PriceChartSheet h={chart.h} mine={chart.mine} own={chart.own} onClose={() => setChart(null)} />}
     </>
   );
 }
@@ -841,7 +841,7 @@ function OfferCard({ x, onAdvertiser }) {
 
 // ------------------------------------------------------------------ trends
 
-function Sparkline({ values, lowerIsBetter, w = 132, h = 40 }) {
+function Sparkline({ values, lowerIsBetter, w = 132, h = 40, own = false }) {
   const pad = 4;
   const min = Math.min(...values); const max = Math.max(...values);
   const span = max - min || 1;
@@ -851,7 +851,7 @@ function Sparkline({ values, lowerIsBetter, w = 132, h = 40 }) {
   const last = pts[pts.length - 1];
   const better = lowerIsBetter ? values[values.length - 1] < values[0] : values[values.length - 1] > values[0];
   return (
-    <svg className={`ri-spark ${better ? 'better' : ''}`} viewBox={`0 0 ${w} ${h}`} width={w} height={h} aria-hidden="true">
+    <svg className={`ri-spark ${own ? 'mine' : better ? 'better' : ''}`} viewBox={`0 0 ${w} ${h}`} width={w} height={h} aria-hidden="true">
       <path d={area} className="area" />
       <path d={d} className="line" />
       <circle cx={last[0]} cy={last[1]} r="3" className="dot" />
@@ -977,7 +977,7 @@ function RadioVsTv({ crossMedia, market }) {
 }
 
 // Stock-style price chart for one tracked offer: tap any week for its exact price.
-function PriceChartSheet({ h, mine, onClose }) {
+function PriceChartSheet({ h, mine, own, onClose }) {
   const vals = h.values;
   const n = vals.length;
   // Optional "you" line: the client's own deal, drawn dashed on the same scale (same unit only).
@@ -1010,6 +1010,8 @@ function PriceChartSheet({ h, mine, onClose }) {
   const first = vals[0]; const last = vals[n - 1];
   const delta = last - first;
   const better = h.lowerIsBetter ? delta < 0 : delta > 0;
+  // Colors from the client's side: competitor getting richer = red (threat), weaker = green, own deal = neutral.
+  const tone = own ? 'mine' : better ? 'better' : 'worse';
   const pct = first ? (delta / first) * 100 : 0;
   const weekDelta = sel > 0 ? vals[sel] - vals[sel - 1] : 0;
   let biggest = { i: 0, d: 0 };
@@ -1030,10 +1032,11 @@ function PriceChartSheet({ h, mine, onClose }) {
 
         <div className="ri-quote">
           <span className="now">{fmt(last)}</span>
-          <span className={`chg ${better ? 'better' : 'worse'}`}>
+          <span className={`chg ${tone}`}>
             {delta < 0 ? '▼' : delta > 0 ? '▲' : '■'} {money(Math.abs(delta))} ({pct > 0 ? '+' : ''}{pct.toFixed(1)}%) since {WEEKS[0]}
           </span>
-          <span className="muted small">{better ? 'A richer deal for shoppers: this competitor is getting aggressive.' : delta === 0 ? 'No change in 8 weeks.' : 'A weaker deal for shoppers than 8 weeks ago.'}</span>
+          <span className="muted small">{own ? (delta === 0 ? 'Your deal hasn’t changed in 8 weeks.' : 'Your own deal over 8 weeks.')
+            : better ? 'Red: a richer deal for shoppers. This competitor is getting aggressive and can cost you sales.' : delta === 0 ? 'No change in 8 weeks.' : 'Green: a weaker deal than 8 weeks ago. Good for you.'}</span>
         </div>
 
         <p className="ri-callout ri-chart-read">
@@ -1043,7 +1046,7 @@ function PriceChartSheet({ h, mine, onClose }) {
         </p>
         {you && (
           <div className="ri-chart-legend">
-            <span><i className={`sw ${better ? 'better' : 'worse'}`} />{h.advertiser}</span>
+            <span><i className={`sw ${tone}`} />{h.advertiser}</span>
             <span><i className="sw you" />You · {mine.product}</span>
           </div>
         )}
@@ -1052,7 +1055,7 @@ function PriceChartSheet({ h, mine, onClose }) {
           <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`${h.advertiser} ${h.product}: ${fmt(first)} on ${WEEKS[0]} to ${fmt(last)} on ${WEEKS[n - 1]}`}>
             <defs>
               <linearGradient id="ri-area" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" className={`stop-a ${better ? 'better' : 'worse'}`} />
+                <stop offset="0%" className={`stop-a ${tone}`} />
                 <stop offset="100%" className="stop-b" />
               </linearGradient>
             </defs>
@@ -1069,10 +1072,10 @@ function PriceChartSheet({ h, mine, onClose }) {
             <line x1={x(sel)} x2={x(sel)} y1={T} y2={H - B} className="cross" />
             {you && <path d={youLine} className="pline you" />}
             {you && <circle cx={x(sel)} cy={y(you[sel])} r="5" className="pt you" />}
-            <path d={line} className={`pline ${better ? 'better' : 'worse'}`} />
+            <path d={line} className={`pline ${tone}`} />
             {vals.map((v, i) => {
               const moved = i > 0 && v !== vals[i - 1];
-              return <circle key={i} cx={x(i)} cy={y(v)} r={i === sel ? 7 : moved ? 5 : 3.5} className={`pt ${better ? 'better' : 'worse'} ${i === sel ? 'sel' : ''} ${moved ? 'moved' : ''}`} />;
+              return <circle key={i} cx={x(i)} cy={y(v)} r={i === sel ? 7 : moved ? 5 : 3.5} className={`pt ${tone} ${i === sel ? 'sel' : ''} ${moved ? 'moved' : ''}`} />;
             })}
             {vals.map((_, i) => (
               <rect key={`hit${i}`} x={x(i) - (W - L - R) / (n - 1) / 2} y={T} width={(W - L - R) / (n - 1)} height={H - T - B}
