@@ -12,27 +12,27 @@ const RAW_STATIONS = {
   Seattle: {
     fm: 'KQMV 92.5,KJR-FM 93.3,KLSY 93.7,KSWD 94.1,KJEB 95.7,KXXO 96.1,KJAQ 96.5,KIRO-FM 97.3,KPNW-FM 98.9,KDDS-FM 99.3,KISW 99.9,KKWF 100.7,KPLZ-FM 101.5,KZOK-FM 102.5,KZTM 102.9,KHTP 103.7,KLSW 104.5,KTDD 104.9,KCMS 105.3,KBKS-FM 106.1,KRWM 106.9,KNDD 107.7',
     am: 'KVI 570,KCIS 630,KIRO 710,KTTH 770,KGNW 820,KHHO 850,KIXI 880,KJR 950,KNWN 1000,KBLE 1050,KPTR 1090,KKNW 1150,KLAY 1180,KMIA 1210,KWYZ 1230,KKDZ 1250,KKOL 1300,KGRG 1330,KKMO 1360,KRKO 1380,KITZ 1400,KRIZ 1420,KSUH 1450,KBRO 1480,KKXA 1520,KXPA 1540,KZIZ 1560,KLFE 1590,KYIZ 1620,KNTS 1680',
-    fmRate: [450, 900], amRate: [70, 240],
+    fmRate: [180, 420], amRate: [30, 100],
   },
   Portland: {
     fm: 'KGON 92.3,KRYP 93.1,KPDQ-FM 93.9,KZZR 94.3,KNRK 94.7,KBFF 95.5,KKWA 96.3,KYCH-FM 97.1,KLVP 97.9,KUPL 98.7,KWJJ-FM 99.5,KKRZ 100.3,KXL-FM 101.1,KINK 101.9,KKCW 103.3,KPOZ 104.1,KPLP 104.5,KRSK-FM 105.1,KFBW 105.9,KLTH 106.7,KXJM 107.5',
     am: 'KPOJ 620,KXTG 750,KPDQ 800,KPAM 860,KWIP 880,KMTT 910,KWBY 940,KUFO 970,KOOR 1010,KXPD 1040,KRSK 1080,KQRR 1130,KEX 1190,KRYN 1410,KBNP 1450,KBPS 1480,KBMS 1520,KGDD 1550,KKOV 1640',
-    fmRate: [340, 700], amRate: [60, 190],
+    fmRate: [130, 300], amRate: [25, 80],
   },
   Spokane: {
     fm: 'KZZU-FM 92.9,KDRK-FM 93.7,KHTQ 94.5,KPND 95.3,KFOO-FM 96.1,KEZE 96.9,KKRS 97.3,KISC 98.1,KKZX 98.9,KXLY-FM 99.9,KEYF-FM 101.1,KTSL 101.9,KICR 102.3,KCDA 103.1,KBBD 103.9,KJYR 104.5,KEEH 104.9,KZBD 105.7,KLSN 106.5,KBNW-FM 107.1',
     am: 'KQNT 590,KTRW 630,KXLX 700,KJRB 790,KXLY 920,KTTO 970,KSPO 1050,KVNI 1080,KSBN 1230,KZFS 1280,KYOZ 1330,KGA 1510',
-    fmRate: [100, 230], amRate: [35, 90],
+    fmRate: [45, 110], amRate: [15, 40],
   },
   Boise: {
     fm: 'KIZN 92.3,KBOI-FM 93.1,KBXL 94.1,KRVB 94.9,KSRV-FM 96.1,KKGL 96.9,KQFC 97.9,KARO 98.7,KLXI 99.5,KQXR 100.3,KPDA 100.7,KWYD 101.1,KQBL 101.9,KZMG 102.7,KSAS-FM 103.5,KAWO 104.3,KJOT 105.1,KCIX 105.9,KDBI-FM 106.3,KTHI 107.1,KXLT-FM 107.9',
     am: 'KIDO 580,KFXD 630,KBOI 670,KSPD 790,KYWN 890,KMHR 950,KBGN 1060,KGEM 1140,KMHI 1240,KKOO 1260,KTIK 1350,KTRP 1450,KCID 1490',
-    fmRate: [95, 210], amRate: [30, 80],
+    fmRate: [40, 100], amRate: [12, 35],
   },
   Nashville: {
     fm: 'WQQK 92.1,WJXA 92.9,WFFI 93.7,WAIV 94.1,WHPY-FM 94.5,WSM-FM 95.5,WCJK 96.3,WLVU 97.1,WSIX-FM 97.9,WANT 98.9,WWTN 99.7,WRLT 100.1,WUBT 101.1,WPRT-FM 102.5,WBUZ 102.9,WKDF 103.3,WGFX 104.5,WLVN 104.9,WNRQ 105.9,WNFN 106.7,WRVW 107.5',
     am: 'WNSR 560,WSM 650,WENO 760,WNTC 790,WQZQ 830,WMDB 880,WKDA 900,WYFN 980,WCRT 1160,WFCN 1200,WNVL 1240,WNQM 1300,WNAH 1360,WHEW 1380,WYGI 1430,WGNS 1450,WVOL 1470,WCOR 1490,WLAC 1510',
-    fmRate: [240, 460], amRate: [45, 140],
+    fmRate: [100, 220], amRate: [20, 60],
   },
 };
 
@@ -291,6 +291,31 @@ const RAW_TV_CREATIVES = [
 ];
 RAW_CREATIVES.push(...RAW_TV_CREATIVES);
 
+
+// City (inside the metro) for each local advertiser, so you can sort and search by city.
+// Real cities; the businesses are fictional demo data. National brands have no city.
+const CITY = {
+  // Seattle metro
+  'Puget Sound Toyota': 'Tacoma', 'Emerald City Subaru': 'Seattle', 'Cascade Ford': 'Tacoma', 'Rainier Honda': 'Renton',
+  'Northgate Kia': 'Seattle', 'Sound Chevrolet': 'Lynnwood', 'Lakeside Lexus': 'Bellevue',
+  'Lake Union Mazda': 'Seattle', 'Cedar River Nissan': 'Renton',
+  'Harbor & Reyes Injury Law': 'Seattle', 'Kessler Brandt Accident Attorneys': 'Bellevue', 'Ridgeline Roofing': 'Kent',
+  'Evergreen Heat Pumps': 'Everett', 'Drip Stop Plumbing': 'Seattle', 'Salish Credit Union': 'Tacoma',
+  'Ballard Brewing Co.': 'Seattle', 'Cascade Urgent Care': 'Bellevue', 'Sleep Harbor Mattress': 'Lynnwood',
+  'Summit Smiles Dental': 'Redmond', 'Pacific Kitchen & Bath': 'Bothell',
+  // Portland metro
+  'Willamette Valley Toyota': 'Tigard', 'Rose City Hyundai': 'Portland', 'Burnside Mazda': 'Portland',
+  'Bridgetown Injury Law': 'Portland', 'Stumptown Heating & Cooling': 'Gresham',
+  // Spokane metro
+  'Inland Empire Chevrolet': 'Spokane Valley', 'Lilac City Roofing': 'Spokane',
+  // Boise metro
+  'Treasure Valley Ford': 'Meridian', 'Snake River Law Group': 'Boise', 'Foothills HVAC': 'Meridian',
+  // Nashville metro
+  'Harpeth Valley Toyota': 'Franklin', 'Riverbend Ford': 'Madison', 'Five Points Chevrolet': 'Nashville', 'Opry Mills Nissan': 'Nashville',
+  'Hale & Crowder Injury Law': 'Nashville', 'Ace Comfort Air': 'Hendersonville',
+};
+export const cityOf = (advertiser) => CITY[advertiser] || null;
+
 export const CREATIVES = RAW_CREATIVES.map((c) => {
   const local = !!(c.market || c.stations);
   let pool;
@@ -312,11 +337,22 @@ export const CREATIVES = RAW_CREATIVES.map((c) => {
     parent: local ? 'Local business (fictional)' : c.parent,
     ...c,
     market,
+    city: c.city || CITY[c.advertiser] || null,
     scope: local ? 'Local' : 'National',
     pool,
     offer: { promoCode: null, phone: null, ...c.offer, promoCode: c.offer.promoCode || null, expires: c.offer.exp ? fmtDate(c.offer.exp) : null },
   };
 });
+
+// Cities that have advertisers on air, per market (for the City filter).
+export const CITIES_BY_MARKET = CREATIVES.reduce((acc, c) => {
+  if (c.city && c.market) {
+    acc[c.market] = acc[c.market] || [];
+    if (!acc[c.market].includes(c.city)) acc[c.market].push(c.city);
+  }
+  return acc;
+}, {});
+Object.values(CITIES_BY_MARKET).forEach((list) => list.sort());
 
 // Offer changes between an advertiser's previous creative and the current one.
 export const OFFER_CHANGES = [
@@ -325,6 +361,18 @@ export const OFFER_CHANGES = [
   { date: 'Nov 3', advertiser: 'Puget Sound Toyota', market: 'Seattle', product: 'Camry SE lease', from: '$329/mo', to: '$309/mo' },
   { date: 'Nov 3', advertiser: 'Harpeth Valley Toyota', market: 'Nashville', product: 'Camry SE lease', from: '$319/mo', to: '$299/mo' },
   { date: 'Nov 1', advertiser: 'Drip Stop Plumbing', market: 'Seattle', product: 'Drain cleaning', from: '$69', to: '$49' },
+];
+
+// Advertisers who just started airing, or went quiet. "Gone dark" = no spots for 7+ days.
+export const MARKET_MOVES = [
+  { kind: 'new', date: 'Nov 4', market: 'Seattle', advertiser: 'Kessler Brandt Accident Attorneys', category: 'Legal', note: 'First spots we have heard from them. Already on 5 FM stations.' },
+  { kind: 'new', date: 'Nov 2', market: 'Seattle', advertiser: 'Lakeside Lexus', category: 'Auto Dealer', note: 'Started on Seattle TV with an RX 350 lease at $599/mo. Not on radio yet.' },
+  { kind: 'dark', date: 'Oct 30', market: 'Seattle', advertiser: 'Lake Union Mazda', category: 'Auto Dealer', note: 'Last offer: CX-5 lease at $299/mo. No spots for 7 days.' },
+  { kind: 'dark', date: 'Oct 27', market: 'Seattle', advertiser: 'Cedar River Nissan', category: 'Auto Dealer', note: 'Last offer: Rogue lease at $289/mo. No spots for 10 days.' },
+  { kind: 'new', date: 'Nov 4', market: 'Portland', advertiser: 'Rose City Hyundai', category: 'Auto Dealer', note: 'Back on radio after 3 weeks off, now with a $0-down Tucson deal.' },
+  { kind: 'dark', date: 'Oct 29', market: 'Portland', advertiser: 'Burnside Mazda', category: 'Auto Dealer', note: 'Last offer: Mazda3 lease at $249/mo. No spots for 8 days.' },
+  { kind: 'new', date: 'Nov 4', market: 'Boise', advertiser: 'Foothills HVAC', category: 'Home Services', note: 'New this season. $79 tune-up on 5 stations.' },
+  { kind: 'dark', date: 'Oct 28', market: 'Nashville', advertiser: 'Opry Mills Nissan', category: 'Auto Dealer', note: 'Last offer: Altima at 1.9% APR. No spots for 9 days.' },
 ];
 
 // 8 weekly snapshots of tracked offers, oldest first (week ending dates).
@@ -404,7 +452,9 @@ export function makeDetection(rng, ts, media = 'Radio') {
 }
 
 // About 3 hours of history so the app opens in a realistic working state.
-export function seedDetections(now = Date.now(), hours = 3, count = 3600, tvCount = 650) {
+// Volume is kept low so each named advertiser's airtime is realistic (a few spots an hour).
+// Market totals will look thin until real recordings fill in every other advertiser.
+export function seedDetections(now = Date.now(), hours = 3, count = 450, tvCount = 70) {
   const rng = mulberry32(20261106);
   const span = hours * 3600 * 1000;
   const list = [];
@@ -460,6 +510,7 @@ export const EXPORT_COLUMNS = [
   ['Daypart', (d) => d.daypart],
   ['Program', (d) => d.program || ''],
   ['Advertiser', (d) => d.creative.advertiser],
+  ['Advertiser City', (d) => d.creative.city || ''],
   ['Parent Company', (d) => d.creative.parent],
   ['Category', (d) => d.creative.category],
   ['Scope', (d) => d.creative.scope],
@@ -475,6 +526,7 @@ export const EXPORT_COLUMNS = [
   ['Term (months)', (d) => num(d.creative.auto?.term)],
   ['APR %', (d) => num(d.creative.auto?.apr)],
   ['Cash Off', (d) => num(d.creative.auto?.cashOff)],
+  ['True Monthly Cost', (d) => { const a = d.creative.auto; return a?.monthly ? Math.round(a.monthly + (a.due || 0) / (a.term || 36)) : ''; }],
   ['Terms & Conditions', (d) => d.creative.offer.terms.join('; ')],
   ['On-Screen Text (TV)', (d) => d.creative.onScreen.join('; ')],
   ['Fine Print Not Spoken (TV)', (d) => d.creative.notSpoken.join('; ')],
