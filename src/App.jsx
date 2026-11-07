@@ -292,7 +292,22 @@ export default function App() {
       setCategory('All'); setCity('All'); setQuery('');
       setWatchlist(rivalsFor(name));
     }
-    if (WEB_SITES.some((s) => s.dealer === name)) save('ri.webme', name);
+    // Real website dealers and the watch roster are all Seattle-area.
+    else if (WEB_SITES.some((s) => s.dealer === name) || ROSTER.some((r) => r.name === name)) { setMarket('Seattle'); setCity('All'); }
+  };
+  // One market at a time: switching market also moves "Insights on" to a business in that market.
+  const marketOf = (name) => {
+    const c = dealOf(name) || CREATIVES.find((x) => x.advertiser === name);
+    if (c) return c.market || null;
+    return WEB_SITES.some((s) => s.dealer === name) || ROSTER.some((r) => r.name === name) ? 'Seattle' : null;
+  };
+  const changeMarket = (m) => {
+    setMarket(m);
+    const mm = marketOf(me);
+    if (m === 'All' || !mm || mm === m) return;
+    const cat = (dealOf(me) || CREATIVES.find((x) => x.advertiser === me))?.category || 'Auto Dealer';
+    const pick = CREATIVES.find((x) => x.market === m && x.category === cat && x.auto) || CREATIVES.find((x) => x.market === m && x.category === cat) || CREATIVES.find((x) => x.market === m);
+    if (pick) chooseMe(pick.advertiser);
   };
   const notify = (text, sub) => setToast({ kind: 'info', text, sub });
   const showAdvertiser = (name) => {
@@ -302,11 +317,11 @@ export default function App() {
     window.scrollTo({ top: 0 });
   };
 
-  const filterProps = { market, setMarket, category, setCategory, city, setCity, query, setQuery, adv, setAdv, media, setMedia };
+  const filterProps = { market, setMarket: changeMarket, category, setCategory, city, setCity, query, setQuery, adv, setAdv, media, setMedia };
 
   return (
     <div className="ri-app">
-      <Header live={live} setLive={setLive} me={me} chooseMe={chooseMe} watchCount={watchlist.filter((n) => n !== me).length} />
+      <Header live={live} setLive={setLive} me={me} chooseMe={chooseMe} watchCount={watchlist.filter((n) => n !== me).length} market={market} />
 
       {toast && (
         <div className={`ri-toast ${toast.kind}`} role="status">
@@ -354,15 +369,16 @@ export default function App() {
 const DIRECTORY = (() => {
   const seen = new Set();
   const out = [];
-  const add = (name, group, meta) => { if (!seen.has(name)) { seen.add(name); out.push({ name, group, meta }); } };
-  for (const c of CREATIVES) add(c.advertiser, 'air', [c.category, c.city || c.market].filter(Boolean).join(' · '));
-  for (const s of WEB_SITES) add(s.dealer, 'web', ['Auto Dealer', s.city].filter(Boolean).join(' · '));
-  for (const r of ROSTER) add(r.name, 'watch', [r.category, r.area].filter(Boolean).join(' · '));
+  // market: null = national (shows in every market). Website dealers and the watch roster are Seattle-area.
+  const add = (name, group, meta, market) => { if (!seen.has(name)) { seen.add(name); out.push({ name, group, meta, market }); } };
+  for (const c of CREATIVES) add(c.advertiser, 'air', [c.category, c.city || c.market || 'National'].filter(Boolean).join(' · '), c.market || null);
+  for (const s of WEB_SITES) add(s.dealer, 'web', ['Auto Dealer', s.city].filter(Boolean).join(' · '), 'Seattle');
+  for (const r of ROSTER) add(r.name, 'watch', [r.category, r.area].filter(Boolean).join(' · '), 'Seattle');
   return out.sort((a, b) => a.name.localeCompare(b.name));
 })();
-const GROUPS = [['air', 'On air now · demo ads'], ['web', 'Website deals · real'], ['watch', 'Watching · no ads heard yet']];
+const GROUPS = [['air', 'On air now · demo ads'], ['web', 'Website deals · real'], ['watch', 'Watching · no ads heard yet'], ['other', 'Other markets']];
 
-function MeBar({ me, chooseMe, watchCount }) {
+function MeBar({ me, chooseMe, watchCount, market = 'All' }) {
   const [text, setText] = useState(me);
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0);
@@ -379,8 +395,11 @@ function MeBar({ me, chooseMe, watchCount }) {
   const dom = q.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
   const siteHit = dom.includes('.') ? WEB_SITES.find((x) => x.domain.startsWith(dom)) : null;
   const showAll = !q || text === me;
-  const list = showAll ? DIRECTORY : DIRECTORY.filter((d) =>
+  // Only the selected market (plus national brands). Typed names from other markets go under "Other markets".
+  const inMkt = (d) => market === 'All' || !d.market || d.market === market;
+  const hits = showAll ? DIRECTORY : DIRECTORY.filter((d) =>
     `${d.name} ${d.meta}`.toLowerCase().includes(q) || (siteHit && d.name === siteHit.dealer));
+  const list = [...hits.filter(inMkt), ...(showAll ? [] : hits.filter((d) => !inMkt(d)).map((d) => ({ ...d, group: 'other', meta: `${d.meta} · ${d.market}` })))];
   const ordered = GROUPS.flatMap(([g]) => list.filter((d) => d.group === g));
 
   const pick = (name) => {
@@ -452,7 +471,7 @@ function MeBar({ me, chooseMe, watchCount }) {
   );
 }
 
-function Header({ live, setLive, me, chooseMe, watchCount }) {
+function Header({ live, setLive, me, chooseMe, watchCount, market = 'All' }) {
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
     const id = setInterval(() => setClock(new Date()), 1000);
@@ -467,7 +486,7 @@ function Header({ live, setLive, me, chooseMe, watchCount }) {
         </svg>
         <div className="ri-brand-text">
           <h1>RadioIntel</h1>
-          <span className="ri-node"><span className="wide">Node </span>Seattle-01 · {clock.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
+          <span className="ri-node"><span className="wide">Node </span>{market === 'All' ? 'All markets' : `${market}-01`} ·{clock.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
         </div>
       </div>
       <div className="ri-header-actions">
@@ -476,7 +495,7 @@ function Header({ live, setLive, me, chooseMe, watchCount }) {
           <span className="dot" />{live ? 'Live' : 'Paused'}
         </button>
       </div>
-      <MeBar me={me} chooseMe={chooseMe} watchCount={watchCount} />
+      <MeBar me={me} chooseMe={chooseMe} watchCount={watchCount} market={market} />
     </header>
   );
 }
@@ -858,12 +877,90 @@ function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo, me, 
   );
 }
 
+// "What changed": the 4 things that matter most this week for the Insights-on business.
+// Order: a change that now beats you, price changes, airtime swings, new ads, gone quiet.
+function WhatChanged({ me, watchlist, events, onOpen }) {
+  const [all, setAll] = useState(false);
+  const mine = dealOf(me) || CREATIVES.find((c) => c.advertiser === me);
+  if (!mine) {
+    return (
+      <section className="ri-changed empty">
+        <span className="ri-eyebrow">What changed this week</span>
+        <p>{me} isn't on air yet. Changes from their competitors show here once we hear them.</p>
+      </section>
+    );
+  }
+  const items = [];
+  for (const n of watchlist.filter((x) => x !== me)) {
+    const parts = []; let pri = 9; let ic = ''; let priced = false;
+    const ch = OFFER_CHANGES.find((x) => x.advertiser === n);
+    const h = PRICE_HISTORY.find((x) => x.advertiser === n);
+    if (ch) { parts.push(`changed ${ch.product}: ${ch.from} → ${ch.to} (${ch.date})`); pri = 1; ic = '⇄'; priced = true; }
+    else if (h && h.values[h.values.length - 1] !== h.values[h.values.length - 2]) {
+      const a = h.values[h.values.length - 2]; const b = h.values[h.values.length - 1];
+      const better = h.lowerIsBetter ? b < a : b > a;
+      parts.push(`${better ? (h.lowerIsBetter ? 'cut' : 'deepened') : (h.lowerIsBetter ? 'raised' : 'shrank')} ${h.product}: ${fmtUnit(a, h.unit)} → ${fmtUnit(b, h.unit)}`);
+      pri = 1; ic = better && h.lowerIsBetter ? '▼' : '▲'; priced = true;
+    }
+    const t = trendOf(n);
+    if (Math.abs(t.pct) >= 0.3) {
+      parts.push(`${t.pct > 0 ? 'upped' : 'cut'} airtime ${Math.round(Math.abs(t.pct) * 100)}% (${t.w.last} → ${t.w.now} spots)`);
+      if (pri > 2) { pri = 2; ic = t.pct > 0 ? '▲' : '▼'; }
+    }
+    const nc = CREATIVES.find((c) => c.advertiser === n && c.isNew);
+    if (nc) { parts.push(`started a new ad: ${nc.offer.headline}`); if (pri > 3) { pri = 3; ic = '✦'; } }
+    const cmp = compareDeals(n, me);
+    const beats = cmp && cmp.status === 'them';
+    if (beats) {
+      const s = cmp.short.charAt(0).toLowerCase() + cmp.short.slice(1);
+      // "now" only when their deal itself changed; an airtime swing doesn't change who's cheaper.
+      parts.push(priced ? `now ${s}` : `${s} (${cmp.them.veh})`);
+      pri = priced ? 0 : Math.min(pri, 1.5);
+      ic = '⚠';
+    }
+    if (parts.length) items.push({ n, pri, ic, parts, beats });
+  }
+  for (const m of MARKET_MOVES) {
+    if (m.market !== mine.market || m.category !== mine.category || m.advertiser === me || items.some((i) => i.n === m.advertiser)) continue;
+    items.push({ n: m.advertiser, pri: 3, ic: m.kind === 'dark' ? '◌' : '✦', parts: [m.kind === 'dark' ? `went quiet: ${m.note}` : `started advertising: ${m.note}`] });
+  }
+  items.sort((a, b) => a.pri - b.pri);
+  const top = all ? items : items.slice(0, 3);
+  return (
+    <section className="ri-changed" aria-label="What changed this week">
+      <div className="ri-changed-head">
+        <span className="ri-eyebrow">What changed this week · vs {me}</span>
+        {items.length > 0 && <span className="ri-count">{items.length} change{items.length === 1 ? '' : 's'}</span>}
+      </div>
+      {top.length === 0 && <p className="ri-changed-none">No changes from your competitors this week.</p>}
+      <ul>
+        {top.map((x) => {
+          const latest = events.find((e) => e.creative.advertiser === x.n);
+          return (
+            <li key={x.n}>
+              <button type="button" className={x.beats ? 'threat' : ''} disabled={!latest} onClick={() => latest && onOpen(latest)}>
+                <span className="ic" aria-hidden="true">{x.ic}</span>
+                <span className="tx"><b>{x.n}</b> {x.parts.join(' · ')}</span>
+                {latest && <span className="go" aria-hidden="true">›</span>}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {items.length > 3 && (
+        <button type="button" className="ri-changed-more" onClick={() => setAll(!all)}>{all ? 'Show less' : `Show all ${items.length}`}</button>
+      )}
+    </section>
+  );
+}
+
 function LiveView({ events, allCount, now, onOpen, watchlist, toggleWatch, goTo, me, setMe, ...filters }) {
   const [limit, setLimit] = useState(FEED_PAGE);
   const [view, setView] = useState('all');
   const shown = view === 'watching' ? events.filter((d) => watchlist.includes(d.creative.advertiser)) : events;
   return (
     <>
+      <WhatChanged me={me} watchlist={watchlist} events={events} onOpen={onOpen} />
       <div className="ri-seg" role="tablist" aria-label="Feed view">
         <button type="button" role="tab" aria-selected={view === 'all'} className={view === 'all' ? 'on' : ''} onClick={() => setView('all')}>All ads</button>
         <button type="button" role="tab" aria-selected={view === 'watching'} className={view === 'watching' ? 'on' : ''} onClick={() => setView('watching')}>
