@@ -350,7 +350,7 @@ export default function App() {
 
 // ------------------------------------------------------------------ chrome
 
-// "You are": type your business once. Suggestions cover every business we know; a website address works too.
+// "Intel on": type any business once (your own or one you're scouting). Suggestions cover every business we know; a website address works too.
 function MeBar({ me, chooseMe, watchCount }) {
   const [text, setText] = useState(me);
   useEffect(() => setText(me), [me]);
@@ -379,9 +379,9 @@ function MeBar({ me, chooseMe, watchCount }) {
       : 'No ads heard yet. We start watching the moment you add a business.';
   return (
     <form className="ri-mebar" onSubmit={submit} role="search">
-      <label htmlFor="ri-me-input">You are</label>
+      <label htmlFor="ri-me-input">Intel on</label>
       <input id="ri-me-input" type="search" list="ri-all-names" value={text} onChange={onChange} onFocus={(e) => e.target.select()}
-        placeholder="Type your business or website" autoComplete="off" enterKeyHint="go" />
+        placeholder="Type any business or website" autoComplete="off" enterKeyHint="go" />
       <datalist id="ri-all-names">{ALL_NAMES.map((n) => <option key={n} value={n} />)}</datalist>
       <span className="ri-mebar-status">{status}</span>
     </form>
@@ -1124,7 +1124,7 @@ function AutoBoard({ offers, market, onAdvertiser, me }) {
           <option value="city">Sort: city A–Z</option>
         </select>
       </div>
-      <p className="ri-note">Every dealer with a lease ad on air, ranked. <span className="ri-vs-badge them">⚠ red</span> = their deal beats <b>{me}</b>’s, <span className="ri-vs-badge you">✓ green</span> = yours is better. Change “You are” at the top to compare as someone else.</p>
+      <p className="ri-note">Every dealer with a lease ad on air, ranked. <span className="ri-vs-badge them">⚠ red</span> = their deal beats <b>{me}</b>’s, <span className="ri-vs-badge you">✓ green</span> = {me}’s is better. Change “Intel on” at the top to look at another business.</p>
       <p className="muted small">True monthly cost adds the money due at signing, spread over the term. It is the fair way to compare a "$0 down" deal with a "$299/mo" deal.</p>
       {leases.length === 0 && <p className="ri-empty">No lease deals match. Try another market or body style.</p>}
       <ol className="ri-board">
@@ -2106,7 +2106,7 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
 
       <div className="ri-section-head"><h2>Price moves</h2><span className="ri-count">8 weeks, {WEEKS[0]} to {WEEKS[WEEKS.length - 1]}</span></div>
       <p className="muted small ri-key">
-        Lines show direction only. <span className="ri-vs-badge them">⚠ red</span> = their deal beats yours ({me}), <span className="ri-vs-badge you">✓ green</span> = yours is better. No color = not comparable.
+        Lines show direction only. <span className="ri-vs-badge them">⚠ red</span> = their deal beats {me}’s, <span className="ri-vs-badge you">✓ green</span> = {me}’s is better. No color = not comparable.
       </p>
       {prices.length === 0 && <p className="ri-empty">No tracked price history in this market yet.</p>}
       <ul className="ri-prices">
