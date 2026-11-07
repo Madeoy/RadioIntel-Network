@@ -904,3 +904,9 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Tap an hour on "When ads run" */
+.ri-hour { margin: 0 0 10px; }
+.ri-hour-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ri-hour-head b { color: var(--accent); }
+.ri-hour-note { font-size: 0.85rem; color: var(--muted); }

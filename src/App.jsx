@@ -3,7 +3,7 @@ import './App.css';
 import {
   HOME_MARKET, MARKETS, STATIONS, TV_STATIONS, CATEGORIES, DAYPARTS, TV_DAYPARTS, OFFER_CHANGES, PRICE_HISTORY, WEEKS, DAYS, EXPORT_COLUMNS,
   CREATIVES, MARKET_MOVES, CITIES_BY_MARKET, cityOf,
-  seedDetections, makeDetection, heatGrid, weekOverWeek, toTSV, toCSV,
+  seedDetections, makeDetection, heatGrid, daypartFor, tvDaypartFor, weekOverWeek, toTSV, toCSV,
 } from './data.js';
 import { WEB_CAPTURED, WEB_SITES, WEB_OFFERS } from './webdeals.js';
 import { ROSTER } from './roster.js';
@@ -1821,7 +1821,7 @@ function RadioVsTv({ crossMedia, market }) {
   const [opp, setOpp] = useState(null);
   const scoped = market === 'All' || market === 'Seattle' ? crossMedia.filter((d) => d.station.market === 'Seattle') : null;
   if (!scoped) {
-    return <p className="ri-note">Radio vs TV compares Seattle, where TV is monitored in this demo. Set the market to Seattle or All.</p>;
+    return <p className="ri-note">Radio vs TV: we don't record TV in {market} yet, so everything on this tab is {market} radio. The TV comparison turns on when {market}'s TV stations are added.</p>;
   }
   const radio = scoped.reduce((a, d) => a + (d.station.media === 'Radio' ? d.estCost : 0), 0);
   const tv = scoped.reduce((a, d) => a + (d.station.media === 'TV' ? d.estCost : 0), 0);
@@ -2253,7 +2253,7 @@ function MixView({ crossMedia, market, category, me, setMe, onAdvertiser }) {
   const [open, setOpen] = useState(null);
   const scoped = market === 'All' || market === 'Seattle' ? crossMedia.filter((d) => d.station.market === 'Seattle') : null;
   const rows = useMemo(() => (scoped ? footprints(scoped) : []), [crossMedia, market]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!scoped) return <p className="ri-note">All media covers Seattle, where TV is monitored in this demo. Set the market to Seattle or All.</p>;
+  if (!scoped) return <p className="ri-note">We don't record TV, cable or streaming in {market} yet, so there's no channel mix to show. It turns on when {market}'s TV stations are added. Radio for {market} is on the Live, Offers and Trends tabs.</p>;
 
   const meCat = (CREATIVES.find((c) => c.advertiser === me) || {}).category;
   const cat = category !== 'All' ? category : meCat;
@@ -2494,6 +2494,116 @@ function PriceChartSheet({ h, mine, own, onClose }) {
   );
 }
 
+// Tap an hour on "When ads run": what it costs, how crowded it is, who you're up against, and a better-value slot.
+const DP_NOTE = {
+  'AM Drive': 'Commute in. The biggest radio audience of the day, priced to match.',
+  Midday: 'At-work listening. Steady audience, lower rates than drive time.',
+  'PM Drive': 'Commute home, close to when people shop. Second-biggest audience.',
+  Evening: 'Fewer listeners and cheaper spots. Good for frequency on a budget.',
+  Overnight: 'Smallest audience and the lowest rates.',
+  'Early Morning': 'Morning news. Commuters and parents getting ready.',
+  Daytime: 'Talk and game shows. The cheapest daytime TV.',
+  'Early News': 'Local news. A loyal, older audience.',
+  'Prime Access': 'The hour before prime. A prime-like audience at a lower rate.',
+  Prime: 'The biggest TV audience and the highest rates.',
+  'Late News': '11 PM news. Good reach at below-prime rates.',
+  'Late Night': 'Late-night talk. A small, cheap audience.',
+};
+
+function HourDetail({ cell, grid, market, category, media, me, events, onClose }) {
+  const { d, h } = cell;
+  const v = grid[d][h];
+  const tv = media === 'TV';
+  const dpOf = (hr) => { const t = new Date(2026, 0, 5, hr); return tv ? tvDaypartFor(t) : daypartFor(t); };
+  const dp = dpOf(h);
+  const flat = grid.flat();
+  const avg = flat.reduce((a, x) => a + x, 0) / (flat.length || 1);
+  const vsAvg = v / (avg || 1);
+  const where = market === 'All' ? 'all markets' : market;
+
+  // Crowding: estimated ads per station in that hour.
+  const sts = STATIONS.filter((st) => (tv ? st.media === 'TV' : st.media === 'Radio') && (market === 'All' || st.market === market));
+  const wsum = sts.reduce((a, st) => a + st.weight, 0) || 1;
+  const perSt = v / wsum;
+  const crowd = perSt >= 10 ? 'crowded' : perSt >= 6 ? 'normal' : 'light';
+
+  // Cost: a :30 at this daypart's rate, on the average station and the top station.
+  const rateAvg = sts.length ? sts.reduce((a, st) => a + st.rate60, 0) / sts.length : 0;
+  const rateTop = sts.length ? Math.max(...sts.map((st) => st.rate60)) : 0;
+  const c30 = (r) => Math.round((r * 0.7 * dp.factor) / 5) * 5;
+
+  // Better value: the same hour on comparable days (weekday vs weekday, weekend vs weekend).
+  // Same hour = a similar audience at the same rate, so fewer ads really means less clutter.
+  const wkend = d >= 5;
+  const same = grid.map((row, dd) => ({ d: dd, h, v: row[h] })).filter((x) => (x.d >= 5) === wkend);
+  const best = [...same].sort((a, b) => a.v - b.v)[0];
+  const cut = best ? 1 - best.v / (v || 1) : 0;
+  const busiest = [...same].sort((a, b) => b.v - a.v)[0];
+
+  // Your category's push: does it lean into this hour more than the market does?
+  const meC = me ? (dealOf(me) || CREATIVES.find((x) => x.advertiser === me)) : null;
+  const cat = category !== 'All' ? category : meC?.category;
+  let push = null;
+  if (cat) {
+    const g = heatGrid(market, cat, media);
+    const f = g.flat();
+    const ca = f.reduce((a, x) => a + x, 0) / (f.length || 1);
+    push = (g[d][h] / (ca || 1)) / (vsAvg || 1);
+  }
+
+  // Who we actually heard in this daypart today (from the live feed).
+  const heard = new Map();
+  let mine = 0;
+  for (const e of events) {
+    if (e.daypart !== dp.name) continue;
+    if (cat && e.creative.category !== cat) continue;
+    if (e.creative.advertiser === me) mine += 1;
+    else heard.set(e.creative.advertiser, (heard.get(e.creative.advertiser) || 0) + 1);
+  }
+  const top = [...heard.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  const rows = [];
+  rows.push({
+    ic: '◷',
+    b: `${dp.name} · ${crowd} hour`,
+    t: `About ${Math.max(1, Math.round(perSt))} ads per station per hour · ${vsAvg >= 1 ? `${vsAvg.toFixed(1)}× a typical hour` : `${Math.round((1 - vsAvg) * 100)}% quieter than a typical hour`}`,
+  });
+  if (rateAvg) {
+    rows.push({ ic: '$', b: `About ${money(c30(rateAvg))} per :30`, t: `Average ${tv ? 'TV' : 'radio'} station in ${where} at this daypart · the top station is about ${money(c30(rateTop))}` });
+  }
+  const dayKind = wkend ? 'weekend' : 'weekday';
+  if (best && best.d !== d && cut >= 0.08) {
+    rows.push({ ic: '↘', b: `Better value: ${DAYS[best.d]} ${hourLabel(h)}`, t: `Same hour and rate, about ${Math.round(cut * 100)}% fewer competing ads, so your spot stands out more.` });
+  } else if (best && busiest && busiest.d !== d) {
+    rows.push({ ic: '✓', b: `The lightest ${dayKind} at ${hourLabel(h)}`, t: `${DAYS[busiest.d]} at this hour carries about ${Math.round((busiest.v / (v || 1) - 1) * 100)}% more ads for the same rate. Good value.` });
+  }
+  if (push != null) {
+    const who = cat.toLowerCase();
+    if (push >= 1.15) rows.push({ ic: '▲', b: `${cat} leans in here`, t: `${cat} advertisers run ${Math.round((push - 1) * 100)}% heavier at this hour than the market overall. Your rivals are loudest here.` });
+    else if (push <= 0.87) rows.push({ ic: '▼', b: `${cat} is quiet here`, t: `${cat} advertisers run ${Math.round((1 - push) * 100)}% lighter at this hour than the market overall. Less noise from your rivals.` });
+    else rows.push({ ic: '≈', b: `${cat} runs at its normal pace here`, t: `No special push from ${who} advertisers at this hour.` });
+  }
+  if (top.length) {
+    rows.push({ ic: '◉', b: `Heard in ${dp.name} today${cat ? ` · ${cat}` : ''}`, t: top.map(([n, k]) => `${n} (${k})`).join(', ') + (meC ? ` · ${me}: ${mine}` : '') });
+  }
+
+  return (
+    <section className="ri-insights ri-hour" aria-label={`${DAYS[d]} ${hourLabel(h)} details`}>
+      <div className="ri-hour-head">
+        <span><b>{DAYS[d]} {hourLabel(h)}</b> · {v.toLocaleString('en-US')} spots{category !== 'All' ? ` in ${category}` : ''}</span>
+        <button type="button" className="ri-chip" onClick={onClose}>Close</button>
+      </div>
+      <p className="ri-hour-note">{DP_NOTE[dp.name]}</p>
+      <ul>
+        {rows.map((r) => (
+          <li key={r.b}><span className="ic" aria-hidden="true">{r.ic}</span><span className="tx"><b>{r.b}</b><span>{r.t}</span></span></li>
+        ))}
+      </ul>
+      <p className="ri-insights-foot">Weekly volume and rates are demo estimates; rates follow each daypart's audience. “Heard today” comes from the live feed.</p>
+    </section>
+  );
+}
+
 function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onAdvertiser, me, ...filters }) {
   const [chart, setChart] = useState(null);
   const { market, category, media } = filters;
@@ -2535,7 +2645,8 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
     }
     return { counts, totals };
   }, [allEvents]);
-  const shareMax = Math.max(...MARKETS.flatMap((m) => CATEGORIES.map((c) => (share.counts[`${m}|${c}`] || 0) / (share.totals[m] || 1))));
+  const shareMkts = market === 'All' ? MARKETS : [market];
+  const shareMax = Math.max(...shareMkts.flatMap((m) => CATEGORIES.map((c) => (share.counts[`${m}|${c}`] || 0) / (share.totals[m] || 1))));
 
   return (
     <>
@@ -2548,11 +2659,9 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
         <span className="ri-count">spots per hour · last 7 days</span>
       </div>
       <div className="ri-panel">
-        <p className="ri-callout">
-          {cell
-            ? <><b>{DAYS[cell.d]} {hourLabel(cell.h)}</b>: {grid[cell.d][cell.h].toLocaleString('en-US')} spots</>
-            : <>Busiest hour: <b>{DAYS[peak.d]} {hourLabel(peak.h)}</b>, {peak.v.toLocaleString('en-US')} spots. Tap any cell.</>}
-        </p>
+        {cell
+          ? <HourDetail cell={cell} grid={grid} market={market} category={category} media={media} me={me} events={events} onClose={() => setCell(null)} />
+          : <p className="ri-callout">Busiest hour: <b>{DAYS[peak.d]} {hourLabel(peak.h)}</b>, {peak.v.toLocaleString('en-US')} spots. Tap any square to see what that hour costs, how crowded it is and a better-value slot.</p>}
         <div className="ri-heat-scroll">
           <div className="ri-heat" role="grid" aria-label="Ad volume by day and hour">
             <span />
@@ -2615,15 +2724,15 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
         ))}
       </ul>
 
-      <div className="ri-section-head"><h2>Category share by market</h2><span className="ri-count">% of each market's spots</span></div>
+      <div className="ri-section-head"><h2>{market === 'All' ? 'Category share by market' : `Category share in ${market}`}</h2><span className="ri-count">% of {market === 'All' ? "each market's" : market} spots</span></div>
       <div className="ri-table-wrap">
         <table className="ri-table ri-share">
-          <thead><tr><th>Category</th>{MARKETS.map((m) => <th key={m} className="num">{m}</th>)}</tr></thead>
+          <thead><tr><th>Category</th>{shareMkts.map((m) => <th key={m} className="num">{m}</th>)}</tr></thead>
           <tbody>
             {CATEGORIES.map((c) => (
               <tr key={c}>
                 <td>{c}</td>
-                {MARKETS.map((m) => {
+                {shareMkts.map((m) => {
                   const v = (share.counts[`${m}|${c}`] || 0) / (share.totals[m] || 1);
                   return <td key={m} className="num" style={{ background: `rgba(0, 229, 153, ${(0.04 + (v / (shareMax || 1)) * 0.4).toFixed(3)})` }}>{(v * 100).toFixed(0)}%</td>;
                 })}
