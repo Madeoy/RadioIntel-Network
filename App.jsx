@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import './App.css';
 import {
   HOME_MARKET, MARKETS, STATIONS, TV_STATIONS, CATEGORIES, DAYPARTS, TV_DAYPARTS, OFFER_CHANGES, PRICE_HISTORY, WEEKS, DAYS, EXPORT_COLUMNS,
-  CREATIVES, MARKET_MOVES,
+  CREATIVES, MARKET_MOVES, CITIES_BY_MARKET, cityOf,
   seedDetections, makeDetection, heatGrid, weekOverWeek, toTSV, toCSV,
 } from './data.js';
 
@@ -173,6 +173,7 @@ export default function App() {
   const [now, setNow] = useState(Date.now());
   const [market, setMarket] = useState(() => store('ri.market', HOME_MARKET));
   const [category, setCategory] = useState('All');
+  const [city, setCity] = useState('All');
   const [media, setMedia] = useState('Radio');
   const [query, setQuery] = useState('');
   const [adv, setAdv] = useState(DEFAULT_ADV);
@@ -198,6 +199,8 @@ export default function App() {
   useEffect(() => save('ri.beatAlerts', beatAlerts), [beatAlerts]);
   useEffect(() => save('ri.me.v1', me), [me]);
   useEffect(() => save('ri.market', market), [market]);
+  // A city belongs to one metro, so changing the market clears it.
+  useEffect(() => { if (city !== 'All' && market !== 'All' && !(CITIES_BY_MARKET[market] || []).includes(city)) setCity('All'); }, [market, city]);
 
   // Simulated real-time ingest across ~200 stations.
   useEffect(() => {
@@ -239,6 +242,7 @@ export default function App() {
       const c = d.creative;
       if (market !== 'All' && d.station.market !== market) return false;
       if (category !== 'All' && c.category !== category) return false;
+      if (city !== 'All' && c.city !== city) return false;
       if (adv.daypart !== 'All' && d.daypart !== adv.daypart) return false;
       if (adv.length !== 'All' && String(c.length) !== adv.length) return false;
       if (adv.adType !== 'All' && c.type !== adv.adType) return false;
@@ -249,10 +253,10 @@ export default function App() {
       if (d.confidence < adv.minConf) return false;
       if (!q) return true;
       const o = c.offer;
-      return [c.advertiser, d.station.call, o.headline, o.product, o.price, c.category, o.promoCode]
+      return [c.advertiser, c.city, d.station.market, d.station.call, o.headline, o.product, o.price, c.category, o.promoCode]
         .some((v) => v && String(v).toLowerCase().includes(q));
     });
-  }, [events, market, category, query, adv]);
+  }, [events, market, category, city, query, adv]);
   const filtered = useMemo(
     () => (media === 'Both' ? crossMedia : crossMedia.filter((d) => d.station.media === media)),
     [crossMedia, media],
@@ -268,7 +272,7 @@ export default function App() {
     window.scrollTo({ top: 0 });
   };
 
-  const filterProps = { market, setMarket, category, setCategory, query, setQuery, adv, setAdv, media, setMedia };
+  const filterProps = { market, setMarket, category, setCategory, city, setCity, query, setQuery, adv, setAdv, media, setMedia };
 
   return (
     <div className="ri-app">
@@ -295,7 +299,7 @@ export default function App() {
         )}
         {tab === 'stations' && <StationsView events={events} now={now} onAdvertiser={showAdvertiser} onOpen={setSelected} />}
         {tab === 'export' && (
-          <ExportView rows={filtered} market={market} category={category} query={query} media={media}
+          <ExportView rows={filtered} market={market} city={city} category={category} query={query} media={media}
             watchlist={watchlist} toggleWatch={toggleWatch} alertsOn={alertsOn} setAlertsOn={setAlertsOn}
             beatAlerts={beatAlerts} setBeatAlerts={setBeatAlerts} me={me} notify={notify} />
         )}
@@ -379,7 +383,7 @@ function MediaSwitch({ media, setMedia }) {
   );
 }
 
-function Filters({ market, setMarket, category, setCategory, query, setQuery, adv, setAdv, media, setMedia, showSearch = true, showAdvanced = true }) {
+function Filters({ market, setMarket, category, setCategory, city, setCity, query, setQuery, adv, setAdv, media, setMedia, showSearch = true, showAdvanced = true }) {
   const [open, setOpen] = useState(false);
   const count = adv ? activeAdvCount(adv) : 0;
   const set = (k, v) => setAdv({ ...adv, [k]: v });
@@ -390,7 +394,7 @@ function Filters({ market, setMarket, category, setCategory, query, setQuery, ad
       {tvMissing && <p className="ri-note">TV monitoring covers Seattle in this demo. Switch the market to Seattle to see TV spots.</p>}
       <div className="ri-filters">
         {showSearch && (
-          <input id="ri-search" type="search" placeholder="Search advertiser, offer, vehicle, code…" value={query}
+          <input id="ri-search" type="search" placeholder="Search advertiser, city, offer, vehicle, code…" value={query}
             onChange={(e) => setQuery(e.target.value)} aria-label="Search detections" />
         )}
         <div className="ri-selects">
@@ -402,6 +406,18 @@ function Filters({ market, setMarket, category, setCategory, query, setQuery, ad
             <option value="All">All categories</option>
             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
+          {setCity && (
+            <select id="ri-city" className="city" value={city} onChange={(e) => setCity(e.target.value)} aria-label="City">
+              <option value="All">{market === 'All' ? 'All cities' : `All ${market} metro`}</option>
+              {market !== 'All'
+                ? (CITIES_BY_MARKET[market] || []).map((ct) => <option key={ct} value={ct}>{ct}</option>)
+                : MARKETS.filter((m) => CITIES_BY_MARKET[m]).map((m) => (
+                  <optgroup key={m} label={`${m} metro`}>
+                    {CITIES_BY_MARKET[m].map((ct) => <option key={ct} value={ct}>{ct}</option>)}
+                  </optgroup>
+                ))}
+            </select>
+          )}
         </div>
       </div>
       {showAdvanced && adv && (
@@ -604,7 +620,7 @@ function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo, me, 
           <li key={isMe ? `me-${w.name}` : w.name} className={`ri-watch-card ${isMe ? 'me' : cmp?.status === 'them' ? 'threat' : cmp?.status === 'you' ? 'win' : fresh ? 'hot' : ''} ${w.history ? 'tappable' : ''}`}
             onClick={open}>
             <div className="ri-watch-top">
-              <span className="nm">{w.name}</span>
+              <span className="nm">{w.name}{cityOf(w.name) && <span className="ri-city"> · {cityOf(w.name)}</span>}</span>
               {isMe ? <span className="ri-you-tag">You</span> : (
                 <button type="button" className="ri-star on" onClick={(e) => { e.stopPropagation(); toggleWatch(w.name); }} aria-label={`Stop watching ${w.name}`}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></svg>
@@ -741,7 +757,7 @@ function FeedCard({ d, now, onOpen }) {
           <span className="ri-len">:{c.length}</span>
         </div>
         <div className="ri-adv-name">
-          <span>{c.advertiser}</span>
+          <span>{c.advertiser}{c.city && <span className="ri-city"> · {c.city}</span>}</span>
           <span className="ri-cat">{c.category}</span>
         </div>
         <p className={`ri-offer ${brand ? 'brand' : ''}`}>{o.headline}</p>
@@ -829,6 +845,7 @@ function DetailSheet({ d, onClose, watched, toggleWatch, notify }) {
     ['Aired', new Date(d.ts).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', second: '2-digit' })],
     ['Station', `${d.station.call} ${d.station.network || d.station.band}`],
     ['Market', d.station.market],
+    ['Advertiser city', c.city || 'National'],
     ['Daypart', d.daypart],
     ['Length', `:${c.length} ${c.type.toLowerCase()}`],
     ['Position', d.pod],
@@ -849,7 +866,7 @@ function DetailSheet({ d, onClose, watched, toggleWatch, notify }) {
         <div className="ri-sheet-grip" />
         <div className="ri-sheet-head">
           <div>
-            <span className="ri-eyebrow">{c.category} · {c.scope}{c.market ? ` · ${c.market}` : ''}</span>
+            <span className="ri-eyebrow">{c.category} · {c.scope}{c.city ? ` · ${c.city}` : ''}{c.market ? ` · ${c.market} metro` : ''}</span>
             <h3>{c.advertiser}</h3>
           </div>
           <button type="button" className="ri-close" onClick={onClose} aria-label="Close">×</button>
@@ -899,8 +916,8 @@ function DetailSheet({ d, onClose, watched, toggleWatch, notify }) {
         </dl>
 
         <div className="ri-sheet-actions">
-          <button type="button" className="ri-btn" onClick={() => toggleWatch(c.advertiser)}>
-            {watched ? 'Stop watching' : `Watch ${c.advertiser}`}
+          <button type="button" className={`ri-btn watch ${watched ? 'on' : ''}`} onClick={() => toggleWatch(c.advertiser)} aria-pressed={watched}>
+            {watched ? '★ Watching · tap to stop' : `☆ Watch ${c.advertiser}`}
           </button>
           <button type="button" className="ri-btn primary" onClick={copyRow}>Copy row for Sheets</button>
         </div>
@@ -928,8 +945,9 @@ function OffersView({ events, onAdvertiser, me, ...filters }) {
   const offers = useMemo(() => groupByCreative(events).sort((a, b) => b.spins - a.spins), [events]);
   const specific = offers.filter((x) => x.c.offer.offerType !== 'Brand');
   const brand = offers.filter((x) => x.c.offer.offerType === 'Brand');
-  const changes = OFFER_CHANGES.filter((ch) => filters.market === 'All' || ch.market === filters.market);
-  const moves = MARKET_MOVES.filter((m) => (filters.market === 'All' || m.market === filters.market) && (filters.category === 'All' || m.category === filters.category));
+  const inCity = (name) => filters.city === 'All' || cityOf(name) === filters.city;
+  const changes = OFFER_CHANGES.filter((ch) => (filters.market === 'All' || ch.market === filters.market) && inCity(ch.advertiser));
+  const moves = MARKET_MOVES.filter((m) => (filters.market === 'All' || m.market === filters.market) && (filters.category === 'All' || m.category === filters.category) && inCity(m.advertiser));
   const fresh = moves.filter((m) => m.kind === 'new');
   const dark = moves.filter((m) => m.kind === 'dark');
 
@@ -942,7 +960,7 @@ function OffersView({ events, onAdvertiser, me, ...filters }) {
         ))}
       </div>
 
-      {view === 'auto' && <AutoBoard offers={offers} market={filters.market} onAdvertiser={onAdvertiser} me={me} />}
+      {view === 'auto' && <AutoBoard offers={offers} market={filters.city !== 'All' ? filters.city : filters.market} onAdvertiser={onAdvertiser} me={me} />}
 
       {view === 'all' && (
         <>
@@ -966,7 +984,7 @@ function OffersView({ events, onAdvertiser, me, ...filters }) {
               <li key={ch.advertiser + ch.date}>
                 <span className="date">{ch.date}</span>
                 <div>
-                  <strong>{ch.advertiser}</strong> <span className="muted">{ch.product} · {ch.market}</span>
+                  <strong>{ch.advertiser}</strong> <span className="muted">{ch.product} · {cityOf(ch.advertiser) ? `${cityOf(ch.advertiser)}, ` : ''}{ch.market}</span>
                   <div className="ri-diff"><s>{ch.from}</s><span aria-hidden="true">→</span><b>{ch.to}</b></div>
                 </div>
               </li>
@@ -980,7 +998,7 @@ function OffersView({ events, onAdvertiser, me, ...filters }) {
               <li key={m.advertiser}>
                 <span className="date">{m.date}</span>
                 <div>
-                  <strong>{m.advertiser}</strong> <span className="tag new">New</span> <span className="muted">{m.category} · {m.market}</span>
+                  <strong>{m.advertiser}</strong> <span className="tag new">New</span> <span className="muted">{m.category} · {cityOf(m.advertiser) ? `${cityOf(m.advertiser)}, ` : ''}{m.market}</span>
                   <div className="muted small">{m.note}</div>
                 </div>
               </li>
@@ -994,7 +1012,7 @@ function OffersView({ events, onAdvertiser, me, ...filters }) {
               <li key={m.advertiser}>
                 <span className="date">{m.date}</span>
                 <div>
-                  <strong>{m.advertiser}</strong> <span className="tag">Last aired</span> <span className="muted">{m.category} · {m.market}</span>
+                  <strong>{m.advertiser}</strong> <span className="tag">Last aired</span> <span className="muted">{m.category} · {cityOf(m.advertiser) ? `${cityOf(m.advertiser)}, ` : ''}{m.market}</span>
                   <div className="muted small">{m.note}</div>
                 </div>
               </li>
@@ -1015,6 +1033,7 @@ function AutoBoard({ offers, market, onAdvertiser, me }) {
     true: (a, b) => a.trueMonthly - b.trueMonthly,
     monthly: (a, b) => a.c.auto.monthly - b.c.auto.monthly,
     spins: (a, b) => b.spins - a.spins,
+    city: (a, b) => (a.c.city || '').localeCompare(b.c.city || '') || a.trueMonthly - b.trueMonthly,
   };
   leases.sort(sorters[sort]);
   const other = auto.filter((x) => !x.c.auto.monthly);
@@ -1035,6 +1054,7 @@ function AutoBoard({ offers, market, onAdvertiser, me }) {
           <option value="true">Sort: true monthly cost</option>
           <option value="monthly">Sort: advertised monthly</option>
           <option value="spins">Sort: most spins</option>
+          <option value="city">Sort: city A–Z</option>
         </select>
       </div>
       <p className="muted small">True monthly cost adds the money due at signing, spread over the term. It is the fair way to compare a "$0 down" deal with a "$299/mo" deal.</p>
@@ -1061,7 +1081,7 @@ function AutoBoard({ offers, market, onAdvertiser, me }) {
                 </div>
                 <div className="sub">
                   <button type="button" className="ri-link" onClick={() => onAdvertiser(x.c.advertiser)}>{x.c.advertiser}</button>
-                  <span>{x.c.market}</span>
+                  <span>{x.c.city ? `${x.c.city}, ${x.c.market} metro` : x.c.market}</span>
                   <span>{x.spins} spins · {x.stations.size} stations</span>
                   <span>Ends {x.c.offer.expires}</span>
                 </div>
@@ -1533,7 +1553,7 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
                 <span className="pct">{((r.spend / total) * 100).toFixed(1)}%</span>
               </div>
               <div className="bar"><span style={{ width: `${(r.spend / maxSpend) * 100}%` }} /></div>
-              <div className="sub"><span>{r.cat}</span><span>{r.spins} spins</span><span>{r.stations.size} stations</span><span>{money(r.spend)}</span></div>
+              <div className="sub"><span>{r.cat}</span>{cityOf(r.name) && <span>{cityOf(r.name)}</span>}<span>{r.spins} spins</span><span>{r.stations.size} stations</span><span>{money(r.spend)}</span></div>
               <p className="offer">{r.offer}</p>
             </div>
             <button type="button" className={`ri-star ${watchlist.includes(r.name) ? 'on' : ''}`} onClick={() => toggleWatch(r.name)}
@@ -1908,9 +1928,9 @@ function StationsView({ events, now, onAdvertiser, onOpen }) {
 
 // ------------------------------------------------------------------ export
 
-function ExportView({ rows, market, category, query, media, watchlist, toggleWatch, alertsOn, setAlertsOn, beatAlerts, setBeatAlerts, me, notify }) {
-  const scope = [media === 'Both' ? 'Radio + TV' : media, market === 'All' ? 'All markets' : market, category === 'All' ? 'all categories' : category, query && `"${query}"`].filter(Boolean).join(', ');
-  const feedUrl = `https://api.radiointel.network/v1/feed.csv?market=${market === 'All' ? 'all' : encodeURIComponent(market.toLowerCase())}&key=YOUR_CLIENT_KEY`;
+function ExportView({ rows, market, city = 'All', category, query, media, watchlist, toggleWatch, alertsOn, setAlertsOn, beatAlerts, setBeatAlerts, me, notify }) {
+  const scope = [media === 'Both' ? 'Radio + TV' : media, market === 'All' ? 'All markets' : `${market} metro`, city !== 'All' && city, category === 'All' ? 'all categories' : category, query && `"${query}"`].filter(Boolean).join(', ');
+  const feedUrl = `https://api.radiointel.network/v1/feed.csv?market=${market === 'All' ? 'all' : encodeURIComponent(market.toLowerCase())}${city !== 'All' ? `&city=${encodeURIComponent(city.toLowerCase())}` : ''}&key=YOUR_CLIENT_KEY`;
   const formula = `=IMPORTDATA("${feedUrl}")`;
 
   const copyRows = async () => {

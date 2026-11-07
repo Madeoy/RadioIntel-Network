@@ -147,10 +147,13 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 }
 .ri-filters input::placeholder { color: var(--muted); }
 .ri-selects { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ri-selects select.city { grid-column: 1 / -1; }
+.ri-city { color: var(--muted); font-weight: 500; }
 @media (min-width: 760px) {
   .ri-filters { flex-direction: row; }
   .ri-filters input { flex: 2; }
-  .ri-selects { flex: 1.4; }
+  .ri-selects { flex: 2; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ri-selects select.city { grid-column: auto; }
 }
 
 /* ---------- section heads */
@@ -245,6 +248,11 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
   background: var(--surface-2); border: 1px solid var(--line-strong);
 }
 .ri-btn.primary { background: var(--accent); color: #04140d; border-color: var(--accent); }
+/* Buttons always state their own colors, so a phone's dark mode can't turn them black-on-black. */
+.ri-btn, .ri-chip { color: var(--fg); -webkit-tap-highlight-color: transparent; }
+.ri-btn:active, .ri-chip:active { background: var(--line-strong); color: var(--fg); }
+.ri-btn.watch.on { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); }
+.ri-btn.primary:active { background: var(--accent); color: #04140d; filter: brightness(0.9); }
 
 /* ---------- offers */
 .ri-changes { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
@@ -359,7 +367,10 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 /* ---------- segmented control */
 .ri-seg { display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; }
 .ri-seg button { flex: 1; background: none; border: 0; border-radius: 7px; padding: 9px 6px; font-size: 0.82rem; font-weight: 700; color: var(--muted); }
-.ri-seg button.on { background: var(--surface-2); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line-strong); }
+/* Selected tab: bright text on a tinted fill, so it never disappears into the black panel. */
+.ri-seg button { -webkit-tap-highlight-color: transparent; }
+.ri-seg button.on { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(0, 229, 153, 0.55); }
+.ri-seg button:active { background: var(--line-strong); color: var(--fg); }
 .ri-kpi-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 4px 0 8px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .ri-seg.mini { flex: none; padding: 2px; }
 .ri-seg.mini button { white-space: nowrap; padding: 5px 10px; font-size: 0.75rem; text-transform: none; letter-spacing: 0; }

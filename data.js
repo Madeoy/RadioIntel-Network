@@ -292,6 +292,30 @@ const RAW_TV_CREATIVES = [
 RAW_CREATIVES.push(...RAW_TV_CREATIVES);
 
 
+// City (inside the metro) for each local advertiser, so you can sort and search by city.
+// Real cities; the businesses are fictional demo data. National brands have no city.
+const CITY = {
+  // Seattle metro
+  'Puget Sound Toyota': 'Tacoma', 'Emerald City Subaru': 'Seattle', 'Cascade Ford': 'Tacoma', 'Rainier Honda': 'Renton',
+  'Northgate Kia': 'Seattle', 'Sound Chevrolet': 'Lynnwood', 'Lakeside Lexus': 'Bellevue',
+  'Lake Union Mazda': 'Seattle', 'Cedar River Nissan': 'Renton',
+  'Harbor & Reyes Injury Law': 'Seattle', 'Kessler Brandt Accident Attorneys': 'Bellevue', 'Ridgeline Roofing': 'Kent',
+  'Evergreen Heat Pumps': 'Everett', 'Drip Stop Plumbing': 'Seattle', 'Salish Credit Union': 'Tacoma',
+  'Ballard Brewing Co.': 'Seattle', 'Cascade Urgent Care': 'Bellevue', 'Sleep Harbor Mattress': 'Lynnwood',
+  'Summit Smiles Dental': 'Redmond', 'Pacific Kitchen & Bath': 'Bothell',
+  // Portland metro
+  'Willamette Valley Toyota': 'Tigard', 'Rose City Hyundai': 'Portland', 'Burnside Mazda': 'Portland',
+  'Bridgetown Injury Law': 'Portland', 'Stumptown Heating & Cooling': 'Gresham',
+  // Spokane metro
+  'Inland Empire Chevrolet': 'Spokane Valley', 'Lilac City Roofing': 'Spokane',
+  // Boise metro
+  'Treasure Valley Ford': 'Meridian', 'Snake River Law Group': 'Boise', 'Foothills HVAC': 'Meridian',
+  // Nashville metro
+  'Harpeth Valley Toyota': 'Franklin', 'Riverbend Ford': 'Madison', 'Five Points Chevrolet': 'Nashville', 'Opry Mills Nissan': 'Nashville',
+  'Hale & Crowder Injury Law': 'Nashville', 'Ace Comfort Air': 'Hendersonville',
+};
+export const cityOf = (advertiser) => CITY[advertiser] || null;
+
 export const CREATIVES = RAW_CREATIVES.map((c) => {
   const local = !!(c.market || c.stations);
   let pool;
@@ -313,11 +337,22 @@ export const CREATIVES = RAW_CREATIVES.map((c) => {
     parent: local ? 'Local business (fictional)' : c.parent,
     ...c,
     market,
+    city: c.city || CITY[c.advertiser] || null,
     scope: local ? 'Local' : 'National',
     pool,
     offer: { promoCode: null, phone: null, ...c.offer, promoCode: c.offer.promoCode || null, expires: c.offer.exp ? fmtDate(c.offer.exp) : null },
   };
 });
+
+// Cities that have advertisers on air, per market (for the City filter).
+export const CITIES_BY_MARKET = CREATIVES.reduce((acc, c) => {
+  if (c.city && c.market) {
+    acc[c.market] = acc[c.market] || [];
+    if (!acc[c.market].includes(c.city)) acc[c.market].push(c.city);
+  }
+  return acc;
+}, {});
+Object.values(CITIES_BY_MARKET).forEach((list) => list.sort());
 
 // Offer changes between an advertiser's previous creative and the current one.
 export const OFFER_CHANGES = [
@@ -475,6 +510,7 @@ export const EXPORT_COLUMNS = [
   ['Daypart', (d) => d.daypart],
   ['Program', (d) => d.program || ''],
   ['Advertiser', (d) => d.creative.advertiser],
+  ['Advertiser City', (d) => d.creative.city || ''],
   ['Parent Company', (d) => d.creative.parent],
   ['Category', (d) => d.creative.category],
   ['Scope', (d) => d.creative.scope],
