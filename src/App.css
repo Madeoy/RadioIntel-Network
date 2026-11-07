@@ -125,6 +125,11 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-kpi { background: var(--surface); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ri-kpi .v { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ri-kpi .l { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); line-height: 1.2; }
+/* Phones (and phones with large system font): 2 across so numbers never clip. */
+@media (max-width: 480px) {
+  .ri-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ri-kpi .v { font-size: min(1.25rem, 6vw); overflow-wrap: anywhere; }
+}
 @media (min-width: 760px) {
   .ri-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .ri-kpi .v { font-size: 1.5rem; }
