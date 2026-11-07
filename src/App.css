@@ -83,6 +83,19 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-brand h1 { font-family: var(--font-display); font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; margin: 0; line-height: 1.1; }
 .ri-node { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ri-header-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.ri-brand-text { min-width: 0; display: flex; flex-direction: column; }
+.ri-node { overflow: hidden; text-overflow: ellipsis; }
+/* Phone widths: shorten the header so the clock line never runs under the badges. */
+@media (max-width: 440px) {
+  .ri-header .wide { display: none; }
+  .ri-header-actions { gap: 6px; }
+  .ri-live { padding: 6px 8px; }
+}
+@media (max-width: 380px) {
+  .ri-node { font-size: 0.6rem; }
+  .ri-brand { gap: 8px; }
+  .ri-logo { width: 26px; height: 26px; }
+}
 .ri-demo {
   font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--amber); background: var(--amber-soft); padding: 4px 7px; border-radius: 4px;
@@ -415,6 +428,47 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-watch-foot .nums { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ri-watch-foot .nums b { color: var(--fg); }
 .ri-watch-empty p { margin: 0; }
+.ri-watch { gap: 14px; }
+.ri-watch-card { padding: 18px; gap: 10px; border-radius: 16px; }
+.ri-watch-card.tappable { cursor: pointer; transition: transform 0.12s ease, border-color 0.12s ease; }
+.ri-watch-card.tappable:active { transform: scale(0.985); }
+.ri-watch-top .nm { font-size: 1.35rem; }
+.ri-watch-offer { font-size: 1.45rem; }
+.ri-watch-foot .nums { font-size: 0.9rem; }
+.ri-watch-trend {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 8px;
+  display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; color: inherit; font: inherit;
+}
+.ri-watch-trend .lbl { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ri-watch-trend .prod { font-size: 0.78rem; color: var(--muted); }
+.ri-watch-trend .mv { font-family: var(--font-mono); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.ri-watch-trend .mv.better { color: var(--accent); }
+.ri-watch-trend .mv.worse { color: var(--amber); }
+.ri-watch-trend .mv b { font-weight: 700; }
+.ri-watch-trend .ri-spark { width: 100%; height: auto; }
+.ri-watch-trend .ri-spark-hint { align-self: flex-end; color: var(--accent); }
+/* the client's own company, pinned on top */
+.ri-me-pick { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.ri-me-pick select { flex: 1; min-width: 0; text-transform: none; letter-spacing: 0; font-size: 0.95rem; font-weight: 600; }
+.ri-watch-card.me { border-color: var(--line-strong); border-left: 3px solid var(--fg); background: var(--surface-2); }
+.ri-watch-card.me .ri-watch-offer { color: var(--fg); }
+.ri-you-tag { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; background: var(--fg); color: var(--bg); }
+.ri-vs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 4px 10px; padding: 10px 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
+.ri-vs > span { display: flex; flex-direction: column; gap: 2px; }
+.ri-vs > span:nth-child(3) { text-align: right; align-items: flex-end; }
+.ri-vs small { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.ri-vs b { font-family: var(--font-display); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.ri-vs .v { color: var(--muted); font-size: 0.8rem; }
+.ri-vs .verdict { grid-column: 1 / -1; font-size: 0.9rem; font-weight: 700; }
+.ri-vs.better .verdict { color: var(--accent); }
+.ri-vs.worse .verdict { color: var(--amber); }
+.ri-chart-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8rem; color: var(--muted); }
+.ri-chart-legend span { display: flex; align-items: center; gap: 6px; }
+.ri-chart-legend .sw { width: 18px; height: 0; border-top: 3px solid var(--accent); }
+.ri-chart-legend .sw.worse { border-top-color: var(--amber); }
+.ri-chart-legend .sw.you { border-top: 3px dashed var(--fg); }
+.ri-chart .pline.you { stroke: var(--fg); stroke-width: 2; stroke-dasharray: 5 4; opacity: 0.85; }
+.ri-chart .pt.you { fill: var(--fg); }
 
 /* ---------- tappable sparkline + stock-style price chart */
 .ri-spark-btn { background: none; border: 0; padding: 4px; border-radius: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }

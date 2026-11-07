@@ -208,13 +208,13 @@ function Header({ live, setLive }) {
           <circle cx="16" cy="16" r="3" fill="currentColor" />
           <path d="M9.5 9.5a9 9 0 0 0 0 13M22.5 9.5a9 9 0 0 1 0 13M5.5 5.5a15 15 0 0 0 0 21M26.5 5.5a15 15 0 0 1 0 21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
-        <div>
+        <div className="ri-brand-text">
           <h1>RadioIntel</h1>
-          <span className="ri-node">Node Seattle-01 · {clock.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
+          <span className="ri-node"><span className="wide">Node </span>Seattle-01 · {clock.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
         </div>
       </div>
       <div className="ri-header-actions">
-        <span className="ri-demo" title="Station names are real; every detection and offer is simulated">Demo data</span>
+        <span className="ri-demo" title="Station names are real; every detection and offer is simulated">Demo<span className="wide"> data</span></span>
         <button type="button" className={`ri-live ${live ? 'on' : ''}`} onClick={() => setLive(!live)} aria-pressed={live}>
           <span className="dot" />{live ? 'Live' : 'Paused'}
         </button>
@@ -363,6 +363,9 @@ function Kpis({ events, market, media }) {
 // "Your competitors right now": one card per watched advertiser, newest offer first.
 function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo }) {
   const [chart, setChart] = useState(null);
+  // The client's own company, pinned on top so every competitor is compared against it.
+  const [me, setMe] = useState(() => store('ri.me.v1', 'Puget Sound Toyota'));
+  useEffect(() => save('ri.me.v1', me), [me]);
   if (watchlist.length === 0) {
     return (
       <div className="ri-panel ri-watch-empty">
@@ -372,7 +375,7 @@ function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo }) {
       </div>
     );
   }
-  const cards = watchlist.map((name) => {
+  const build = (name) => {
     const evs = events.filter((d) => d.creative.advertiser === name);
     return {
       name, evs, latest: evs[0],
@@ -381,29 +384,66 @@ function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo }) {
       change: OFFER_CHANGES.find((c) => c.advertiser === name),
       history: PRICE_HISTORY.find((p) => p.advertiser === name),
     };
-  }).sort((a, b) => (b.latest?.ts || 0) - (a.latest?.ts || 0));
+  };
+  const meCard = build(me);
+  const cards = watchlist.filter((n) => n !== me).map(build).sort((a, b) => (b.latest?.ts || 0) - (a.latest?.ts || 0));
+  const names = [...new Set([me, ...PRICE_HISTORY.map((p) => p.advertiser), ...events.map((d) => d.creative.advertiser)])].sort();
+  const fmtH = (h, n) => (h.unit === ' off' ? `$${n.toLocaleString()} off` : `$${n.toLocaleString()}${h.unit}`);
+  // "Them vs you" on the current deal. Only compares like with like (lease vs lease, discount vs discount).
+  const compare = (w) => {
+    const a = w.history; const b = meCard.history;
+    if (!a || !b || a.unit !== b.unit) return null;
+    const them = a.values[a.values.length - 1]; const you = b.values[b.values.length - 1];
+    const gap = Math.abs(them - you);
+    const off = a.unit === ' off';
+    const youWin = a.lowerIsBetter ? you < them : you > them;
+    const text = gap === 0 ? 'Same deal as you'
+      : youWin ? (off ? `You give ${money(gap)} more off` : `You’re ${money(gap)}${a.unit} cheaper`)
+      : (off ? `They give ${money(gap)} more off` : `They’re ${money(gap)}${a.unit} cheaper`);
+    return { them: fmtH(a, them), you: fmtH(b, you), text, cls: gap === 0 ? '' : youWin ? 'better' : 'worse' };
+  };
 
   return (
     <>
+    <label className="ri-me-pick">
+      <span>Your dealership</span>
+      <select value={me} onChange={(e) => setMe(e.target.value)}>
+        {names.map((n) => <option key={n} value={n}>{n}</option>)}
+      </select>
+    </label>
     <ul className="ri-watch">
-      {cards.map((w) => {
+      {[meCard, ...cards].map((w) => {
+        const isMe = w === meCard;
         const o = w.latest?.creative.offer;
         const fresh = w.latest && now - w.latest.ts < 15 * 60000;
+        const cmp = isMe ? null : compare(w);
+        const open = () => w.history && setChart({ h: w.history, mine: isMe ? null : meCard.history });
         return (
-          <li key={w.name} className={`ri-watch-card ${fresh ? 'hot' : ''}`}>
+          <li key={isMe ? `me-${w.name}` : w.name} className={`ri-watch-card ${isMe ? 'me' : fresh ? 'hot' : ''} ${w.history ? 'tappable' : ''}`}
+            onClick={open}>
             <div className="ri-watch-top">
               <span className="nm">{w.name}</span>
-              <button type="button" className="ri-star on" onClick={() => toggleWatch(w.name)} aria-label={`Stop watching ${w.name}`}>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></svg>
-              </button>
+              {isMe ? <span className="ri-you-tag">You</span> : (
+                <button type="button" className="ri-star on" onClick={(e) => { e.stopPropagation(); toggleWatch(w.name); }} aria-label={`Stop watching ${w.name}`}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></svg>
+                </button>
+              )}
             </div>
+            {cmp && (
+              <div className={`ri-vs ${cmp.cls}`}>
+                <span><small>Them</small><b>{cmp.them}</b></span>
+                <span className="v">vs</span>
+                <span><small>You</small><b>{cmp.you}</b></span>
+                <span className="verdict">{cmp.text}</span>
+              </div>
+            )}
             {w.latest ? (
               <>
                 <p className="ri-watch-status">
                   <span className={`dot ${fresh ? 'on' : ''}`} />
                   Last aired {ago(w.latest.ts, now)} on {w.latest.station.call}
                 </p>
-                <button type="button" className="ri-watch-offer" onClick={() => onOpen(w.latest)}>{o.headline}</button>
+                <button type="button" className="ri-watch-offer" onClick={(e) => { e.stopPropagation(); onOpen(w.latest); }}>{o.headline}</button>
                 {w.change && (
                   <p className="ri-watch-change">
                     <span className="tag amber">Changed {w.change.date}</span>
@@ -417,22 +457,33 @@ function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo }) {
                     <span><b>{money(w.spend)}</b> est.</span>
                     {o.expires && <span>Ends <b>{o.expires}</b></span>}
                   </div>
-                  {w.history && (
-                    <button type="button" className="ri-spark-btn" onClick={() => setChart(w.history)} aria-label={`Open ${w.name} price chart`}>
-                      <Sparkline values={w.history.values} lowerIsBetter={w.history.lowerIsBetter} />
-                      <span className="ri-spark-hint">Tap for chart</span>
-                    </button>
-                  )}
                 </div>
+                {w.history && (() => {
+                  const v = w.history.values; const first = v[0]; const last = v[v.length - 1];
+                  const better = w.history.lowerIsBetter ? last < first : last > first;
+                  const fmt = (n) => (w.history.unit === ' off' ? `$${n.toLocaleString()} off` : `$${n.toLocaleString()}${w.history.unit}`);
+                  return (
+                    <button type="button" className="ri-watch-trend" onClick={(e) => { e.stopPropagation(); open(); }} aria-label={`Open ${w.name} price chart`}>
+                      <span className="lbl">
+                        <span className="prod">{w.history.product} · 8 weeks</span>
+                        <span className={`mv ${better ? 'better' : last === first ? '' : 'worse'}`}>
+                          {fmt(first)} → <b>{fmt(last)}</b>
+                        </span>
+                      </span>
+                      <Sparkline values={v} lowerIsBetter={w.history.lowerIsBetter} w={320} h={70} />
+                      <span className="ri-spark-hint">{isMe || !cmp ? 'Tap for full chart ›' : 'Tap to compare on chart ›'}</span>
+                    </button>
+                  );
+                })()}
               </>
             ) : (
-              <p className="muted small">No spots in the last 3 hours with your current filters.</p>
+              <p className="muted small">{isMe ? 'You haven’t aired in the last 3 hours with these filters.' : 'No spots in the last 3 hours. If they stay off radio, that’s your open lane.'}</p>
             )}
           </li>
         );
       })}
     </ul>
-    {chart && <PriceChartSheet h={chart} onClose={() => setChart(null)} />}
+    {chart && <PriceChartSheet h={chart.h} mine={chart.mine} onClose={() => setChart(null)} />}
     </>
   );
 }
@@ -790,8 +841,8 @@ function OfferCard({ x, onAdvertiser }) {
 
 // ------------------------------------------------------------------ trends
 
-function Sparkline({ values, lowerIsBetter }) {
-  const w = 132; const h = 40; const pad = 4;
+function Sparkline({ values, lowerIsBetter, w = 132, h = 40 }) {
+  const pad = 4;
   const min = Math.min(...values); const max = Math.max(...values);
   const span = max - min || 1;
   const pts = values.map((v, i) => [pad + (i * (w - pad * 2)) / (values.length - 1), pad + (h - pad * 2) * (1 - (v - min) / span)]);
@@ -926,9 +977,11 @@ function RadioVsTv({ crossMedia, market }) {
 }
 
 // Stock-style price chart for one tracked offer: tap any week for its exact price.
-function PriceChartSheet({ h, onClose }) {
+function PriceChartSheet({ h, mine, onClose }) {
   const vals = h.values;
   const n = vals.length;
+  // Optional "you" line: the client's own deal, drawn dashed on the same scale (same unit only).
+  const you = mine && mine.unit === h.unit && mine.advertiser !== h.advertiser && mine.values.length === n ? mine.values : null;
   const [sel, setSel] = useState(n - 1);
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -937,7 +990,8 @@ function PriceChartSheet({ h, onClose }) {
   }, [onClose]);
 
   const W = 360; const H = 220; const L = 54; const R = 14; const T = 14; const B = 30;
-  const min = Math.min(...vals); const max = Math.max(...vals);
+  const all = you ? [...vals, ...you] : vals;
+  const min = Math.min(...all); const max = Math.max(...all);
   const pad = (max - min || max * 0.1) * 0.2;
   const lo = Math.max(0, min - pad); const hi = max + pad;
   const x = (i) => L + (i * (W - L - R)) / (n - 1);
@@ -950,6 +1004,7 @@ function PriceChartSheet({ h, onClose }) {
   for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
   const line = vals.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
   const area = `${line} L${x(n - 1)},${H - B} L${x(0)},${H - B} Z`;
+  const youLine = you && you.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
   const fmt = (v) => `${money(v)}${h.unit}`;
 
   const first = vals[0]; const last = vals[n - 1];
@@ -984,7 +1039,14 @@ function PriceChartSheet({ h, onClose }) {
         <p className="ri-callout ri-chart-read">
           Week of <b>{WEEKS[sel]}</b>: <b>{fmt(vals[sel])}</b>
           {sel > 0 && <span className="muted"> · {weekDelta === 0 ? 'no change' : `${weekDelta < 0 ? '▼' : '▲'} ${money(Math.abs(weekDelta))} vs week before`}</span>}
+          {you && <><br /><span className="muted">You ({mine.advertiser}): </span><b>{fmt(you[sel])}</b></>}
         </p>
+        {you && (
+          <div className="ri-chart-legend">
+            <span><i className={`sw ${better ? 'better' : 'worse'}`} />{h.advertiser}</span>
+            <span><i className="sw you" />You · {mine.product}</span>
+          </div>
+        )}
 
         <div className="ri-chart">
           <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`${h.advertiser} ${h.product}: ${fmt(first)} on ${WEEKS[0]} to ${fmt(last)} on ${WEEKS[n - 1]}`}>
@@ -1005,6 +1067,8 @@ function PriceChartSheet({ h, onClose }) {
             ))}
             <path d={area} fill="url(#ri-area)" />
             <line x1={x(sel)} x2={x(sel)} y1={T} y2={H - B} className="cross" />
+            {you && <path d={youLine} className="pline you" />}
+            {you && <circle cx={x(sel)} cy={y(you[sel])} r="5" className="pt you" />}
             <path d={line} className={`pline ${better ? 'better' : 'worse'}`} />
             {vals.map((v, i) => {
               const moved = i > 0 && v !== vals[i - 1];
@@ -1027,7 +1091,7 @@ function PriceChartSheet({ h, onClose }) {
         <span className="ri-eyebrow">Week by week</span>
         <div className="ri-table-wrap">
           <table className="ri-table ri-weeks">
-            <thead><tr><th>Week of</th><th className="num">Price</th><th className="num">Change</th></tr></thead>
+            <thead><tr><th>Week of</th><th className="num">{you ? 'Them' : 'Price'}</th>{you && <th className="num">You</th>}<th className="num">Change</th></tr></thead>
             <tbody>
               {vals.map((v, i) => {
                 const d = i ? v - vals[i - 1] : 0;
@@ -1035,6 +1099,7 @@ function PriceChartSheet({ h, onClose }) {
                   <tr key={i} className={i === sel ? 'home' : ''} onClick={() => setSel(i)}>
                     <td>{WEEKS[i]}</td>
                     <td className="num">{fmt(v)}</td>
+                    {you && <td className="num">{fmt(you[i])}</td>}
                     <td className="num">{i === 0 ? '–' : d === 0 ? 'no change' : `${d < 0 ? '▼' : '▲'} ${money(Math.abs(d))}`}</td>
                   </tr>
                 );
