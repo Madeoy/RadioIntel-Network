@@ -83,10 +83,37 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-header { flex-wrap: wrap; row-gap: 10px; }
 .ri-mebar { flex: 1 1 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 10px; row-gap: 4px; }
 .ri-mebar label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.ri-combo { position: relative; min-width: 0; }
 .ri-mebar input {
   min-width: 0; width: 100%; font: inherit; font-size: 1rem; font-weight: 700; color: var(--fg);
-  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; padding: 9px 12px;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; padding: 9px 46px 9px 12px;
+  text-overflow: ellipsis;
 }
+.ri-combo-btn {
+  position: absolute; top: 1px; right: 1px; bottom: 1px; width: 42px;
+  display: grid; place-items: center; background: none; border: 0; border-left: 1px solid var(--line);
+  border-radius: 0 9px 9px 0; color: var(--muted); cursor: pointer;
+}
+.ri-combo-btn svg { width: 14px; height: 14px; }
+.ri-combo-btn:hover { color: var(--accent); }
+.ri-combo-list {
+  position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 60;
+  max-height: min(60vh, 440px); overflow-y: auto; overscroll-behavior: contain;
+  margin: 0; padding: 6px; list-style: none;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+}
+.ri-combo-group {
+  position: sticky; top: -6px; z-index: 1; background: var(--surface);
+  padding: 10px 8px 6px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent);
+}
+.ri-combo-group span { color: var(--muted); font-weight: 600; margin-left: 4px; }
+.ri-combo-opt { display: flex; flex-direction: column; gap: 1px; padding: 9px 10px; border-radius: 8px; cursor: pointer; }
+.ri-combo-opt .nm { font-weight: 700; color: var(--fg); }
+.ri-combo-opt .meta { font-size: 0.75rem; color: var(--muted); }
+.ri-combo-opt.hi { background: var(--accent-soft); }
+.ri-combo-opt.cur .nm::after { content: ' ✓'; color: var(--accent); }
+.ri-combo-empty { padding: 12px 10px; color: var(--muted); font-size: 0.85rem; }
 .ri-mebar input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .ri-mebar-status { grid-column: 2; font-size: 0.75rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ri-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }

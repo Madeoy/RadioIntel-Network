@@ -6,6 +6,7 @@ import {
   seedDetections, makeDetection, heatGrid, weekOverWeek, toTSV, toCSV,
 } from './data.js';
 import { WEB_CAPTURED, WEB_SITES, WEB_OFFERS } from './webdeals.js';
+import { ROSTER } from './roster.js';
 
 const IS_PREVIEW = typeof window !== 'undefined' && !!window.__RI_PREVIEW__;
 const LIVE_INTERVAL_MS = 4000;
@@ -78,8 +79,6 @@ function dealsBeatingMe(meName) {
     .sort((a, b) => b.cmp.gap - a.cmp.gap);
 }
 
-// Every business the app knows: on air (demo) or with a real website we read.
-const ALL_NAMES = [...new Set([...CREATIVES.map((c) => c.advertiser), ...WEB_SITES.map((s) => s.dealer)])].sort();
 const MAKES = ['toyota', 'honda', 'ford', 'subaru', 'chevrolet', 'chevy', 'nissan', 'hyundai', 'kia', 'mazda', 'jeep', 'ram', 'gmc', 'bmw', 'lexus',
   'volkswagen', 'vw', 'audi', 'mercedes', 'tesla', 'dodge', 'chrysler', 'buick', 'cadillac', 'acura', 'infiniti', 'volvo', 'mitsubishi'];
 
@@ -350,39 +349,104 @@ export default function App() {
 
 // ------------------------------------------------------------------ chrome
 
-// "Insights on": type any business once (your own or one you're scouting). Suggestions cover every business we know; a website address works too.
+// "Insights on": pick any business we know (tap ▾ for the full list) or start typing to filter. A website address works too.
+// Three kinds: on air (demo ads), real website deals, and real businesses we watch that haven't been heard yet.
+const DIRECTORY = (() => {
+  const seen = new Set();
+  const out = [];
+  const add = (name, group, meta) => { if (!seen.has(name)) { seen.add(name); out.push({ name, group, meta }); } };
+  for (const c of CREATIVES) add(c.advertiser, 'air', [c.category, c.city || c.market].filter(Boolean).join(' · '));
+  for (const s of WEB_SITES) add(s.dealer, 'web', ['Auto Dealer', s.city].filter(Boolean).join(' · '));
+  for (const r of ROSTER) add(r.name, 'watch', [r.category, r.area].filter(Boolean).join(' · '));
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+})();
+const GROUPS = [['air', 'On air now · demo ads'], ['web', 'Website deals · real'], ['watch', 'Watching · no ads heard yet']];
+
 function MeBar({ me, chooseMe, watchCount }) {
   const [text, setText] = useState(me);
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+  const box = useRef(null);
   useEffect(() => setText(me), [me]);
-  const match = (t) => {
-    const s = t.trim().toLowerCase();
-    if (!s) return null;
-    const dom = s.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
-    return ALL_NAMES.find((n) => n.toLowerCase() === s) || WEB_SITES.find((x) => x.domain === dom)?.dealer || null;
+  useEffect(() => {
+    if (!open) return undefined;
+    const off = (e) => { if (box.current && !box.current.contains(e.target)) { setOpen(false); setText(me); } };
+    document.addEventListener('pointerdown', off);
+    return () => document.removeEventListener('pointerdown', off);
+  }, [open, me]);
+
+  const q = text.trim().toLowerCase();
+  const dom = q.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
+  const siteHit = dom.includes('.') ? WEB_SITES.find((x) => x.domain.startsWith(dom)) : null;
+  const showAll = !q || text === me;
+  const list = showAll ? DIRECTORY : DIRECTORY.filter((d) =>
+    `${d.name} ${d.meta}`.toLowerCase().includes(q) || (siteHit && d.name === siteHit.dealer));
+  const ordered = GROUPS.flatMap(([g]) => list.filter((d) => d.group === g));
+
+  const pick = (name) => {
+    setOpen(false);
+    setText(name);
+    if (name && name !== me) chooseMe(name);
+    document.activeElement?.blur();
   };
-  const onChange = (e) => {
-    setText(e.target.value);
-    const m = match(e.target.value);
-    if (m && m !== me) chooseMe(m);
+  const onKey = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHi((h) => Math.min(h + 1, ordered.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
+    else if (e.key === 'Escape') { setOpen(false); setText(me); }
   };
   const submit = (e) => {
     e.preventDefault();
-    const name = match(text) || text.trim();
-    if (name && name !== me) chooseMe(name);
-    e.target.querySelector('input')?.blur();
+    if (showAll) { setOpen(false); document.activeElement?.blur(); return; }
+    pick(ordered[hi]?.name || ordered[0]?.name || text.trim());
   };
+
   const c = dealOf(me) || CREATIVES.find((x) => x.advertiser === me);
   const site = WEB_SITES.find((s) => s.dealer === me);
   const status = c
     ? `${c.category} · ${c.market || 'all markets'} · comparing with ${watchCount} competitor${watchCount === 1 ? '' : 's'}`
     : site ? 'Not heard on air yet · real website deals on the Websites tab'
-      : 'No ads heard yet. We start watching the moment you add a business.';
+      : 'Watching · no ads heard yet. Data starts the moment they air.';
+  let i = -1;
   return (
-    <form className="ri-mebar" onSubmit={submit} role="search">
+    <form className="ri-mebar" onSubmit={submit} role="search" ref={box}>
       <label htmlFor="ri-me-input">Insights on</label>
-      <input id="ri-me-input" type="search" list="ri-all-names" value={text} onChange={onChange} onFocus={(e) => e.target.select()}
-        placeholder="Type any business or website" autoComplete="off" enterKeyHint="go" />
-      <datalist id="ri-all-names">{ALL_NAMES.map((n) => <option key={n} value={n} />)}</datalist>
+      <div className="ri-combo">
+        <input id="ri-me-input" type="text" value={text} autoComplete="off" enterKeyHint="go"
+          placeholder="Type any business or website" role="combobox" aria-expanded={open} aria-controls="ri-me-list"
+          onChange={(e) => { setText(e.target.value); setOpen(true); setHi(0); }}
+          onFocus={(e) => { e.target.select(); setOpen(true); setHi(0); }} onKeyDown={onKey} />
+        <button type="button" className="ri-combo-btn" aria-label="Show every business"
+          onClick={() => { setText(me); setOpen(!open); setHi(0); }}>
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </button>
+        {open && (
+          <ul className="ri-combo-list" id="ri-me-list" role="listbox">
+            {ordered.length === 0 && (
+              <li className="ri-combo-empty">Not in our database yet. Press Go to start watching “{text.trim()}”.</li>
+            )}
+            {GROUPS.map(([g, label]) => {
+              const rows = ordered.filter((d) => d.group === g);
+              if (!rows.length) return null;
+              return (
+                <React.Fragment key={g}>
+                  <li className="ri-combo-group" role="presentation">{label} <span>{rows.length}</span></li>
+                  {rows.map((d) => {
+                    i += 1;
+                    const n = i;
+                    return (
+                      <li key={d.name} role="option" aria-selected={n === hi}
+                        className={`ri-combo-opt ${n === hi ? 'hi' : ''} ${d.name === me ? 'cur' : ''}`}
+                        onPointerDown={(e) => e.preventDefault()} onClick={() => pick(d.name)} onPointerEnter={() => setHi(n)}>
+                        <span className="nm">{d.name}</span><span className="meta">{d.meta}</span>
+                      </li>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+          </ul>
+        )}
+      </div>
       <span className="ri-mebar-status">{status}</span>
     </form>
   );
