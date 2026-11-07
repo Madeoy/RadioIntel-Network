@@ -946,3 +946,13 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
   .ri-heat-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 360px; align-items: start; gap: 18px; }
   .ri-heat-side { position: sticky; top: 12px; }
 }
+
+/* "When ads run": what it's for */
+.ri-heat-why { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: rgba(0, 199, 133, 0.05); }
+.ri-heat-uses { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 8px; }
+.ri-heat-uses li { display: flex; flex-direction: column; gap: 1px; padding-left: 12px; border-left: 2px solid var(--accent); }
+.ri-heat-uses b { font-size: 0.88rem; }
+.ri-heat-uses span { font-size: 0.82rem; color: var(--muted); }
+.ri-heat-pick { font-size: 0.88rem; }
+.ri-heat-pick .ri-link { font-weight: 700; color: var(--accent); }
+@media (min-width: 760px) { .ri-heat-uses { grid-template-columns: 1fr 1fr; } }

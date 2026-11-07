@@ -2498,7 +2498,7 @@ function PriceChartSheet({ h, mine, own, onClose }) {
 }
 
 // What "When ads run" counts, in plain words, plus the terms the hour card uses.
-function HeatHelp({ market, category, media }) {
+function HeatHelp({ market, category, media, grid, onPick }) {
   const inMkt = (s) => market === 'All' || s.market === market;
   const radio = STATIONS.filter((s) => s.media === 'Radio' && inMkt(s)).length;
   const tvN = STATIONS.filter((s) => s.media === 'TV' && inMkt(s)).length;
@@ -2508,9 +2508,40 @@ function HeatHelp({ market, category, media }) {
       : `${radio} radio and ${tvN} TV stations`;
   const what = category === 'All' ? <><b>All ads</b>, every category,</> : <>Only <b>{category}</b> ads</>;
   const tvParts = media === 'TV';
+
+  // Quick answer: the best-value prime slot. Prime = drive time on radio (6-10 AM, 3-7 PM), early news and prime on TV.
+  // For each prime hour, compare the lightest weekday with the busiest weekday at that same hour (same audience, same rate).
+  const primeHours = tvParts ? [16, 17, 18, 20, 21, 22] : [6, 7, 8, 9, 15, 16, 17, 18];
+  let pick = null;
+  if (grid && grid.length) {
+    for (const h of primeHours) {
+      const days = [0, 1, 2, 3, 4].map((d) => ({ d, v: grid[d][h] }));
+      const lo = days.reduce((a, b) => (b.v < a.v ? b : a));
+      const hi = days.reduce((a, b) => (b.v > a.v ? b : a));
+      const save = hi.v ? 1 - lo.v / hi.v : 0;
+      if (!pick || save > pick.save) pick = { d: lo.d, h, save, hiD: hi.d };
+    }
+  }
+  const prime = tvParts ? 'prime-time' : 'drive-time';
   return (
     <div className="ri-heat-help">
-      <p>{what} on the <b>{stations}</b> in {where}, added up for each hour of the last 7 days. Each square is one hour of the week; darker means more ads. Tap a square for that hour's cost, how crowded it is and a better-value slot.</p>
+      <div className="ri-heat-why">
+        <p><b>What it's for: picking the best time to buy {tvParts ? 'TV' : 'radio'}.</b> Every square is one hour of the week, colored by how many ads ran. Bright squares are where the ads pile up; dark squares are quiet.</p>
+        <ul className="ri-heat-uses">
+          <li><b>Find the best time to buy</b><span>A big audience but fewer competing ads, so yours stands out. Look for "Better value" in an hour's details.</span></li>
+          <li><b>See when your rivals are loud</b><span>Pick your category in the filters. Car dealers, for example, pile on Thursday to Saturday before the weekend.</span></li>
+          <li><b>Know the price before you call</b><span>Each hour shows what a :30 spot about costs, so you can tell a fair rate from a high one when a station quotes you.</span></li>
+          <li><b>Check the schedule you're sold</b><span>If your spots land in the brightest squares, you're paying for the most crowded breaks. Ask the station for the quieter days at the same hour.</span></li>
+        </ul>
+        {pick && pick.save >= 0.05 && (
+          <p className="ri-heat-pick">
+            <b>Quick answer:</b> the best-value {prime} slot here is{' '}
+            <button type="button" className="ri-link" onClick={() => onPick && onPick({ d: pick.d, h: pick.h })}>{DAYS[pick.d]} {hourLabel(pick.h)}</button>.
+            {' '}About {Math.round(pick.save * 100)}% fewer ads than {DAYS[pick.hiD]} at the same hour and rate.
+          </p>
+        )}
+      </div>
+      <p>{what} on the <b>{stations}</b> in {where}, added up for each hour of the last 7 days. Brighter green means more ads.</p>
       <p className="muted small">{category === 'All' ? 'Pick a category in the filters to see only your kind of business.' : 'Set Category to All to see every ad.'} Radio/TV switches which stations are counted.</p>
       <details className="ri-defs">
         <summary>What the terms mean</summary>
@@ -2700,7 +2731,7 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
         <h2>When ads run{media !== 'Both' ? ` on ${media}` : ''}</h2>
         <span className="ri-count">spots per hour · last 7 days</span>
       </div>
-      <HeatHelp market={market} category={category} media={media} />
+      <HeatHelp market={market} category={category} media={media} grid={grid} onPick={setCell} />
       {/* The details sit beside the grid on a computer and below it on a phone, so the grid never jumps. */}
       <div className="ri-panel ri-heat-wrap">
         <div className="ri-heat-main">
