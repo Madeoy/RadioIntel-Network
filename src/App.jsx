@@ -905,6 +905,8 @@ function FeedCard({ d, now, onOpen }) {
   const fresh = now - d.ts < 10000;
   const brand = o.offerType === 'Brand';
   const ending = daysUntil(o) <= 7;
+  const tr = trendOf(c.advertiser);
+  const pd = tr.price && tr.price.dir !== 'same' ? tr.price : null;
   return (
     <li>
       <button type="button" className={`ri-card ${fresh ? 'fresh' : ''}`} onClick={() => onOpen(d)}>
@@ -927,6 +929,9 @@ function FeedCard({ d, now, onOpen }) {
         )}
         <div className="ri-tags">
           {fresh && <span className="tag new">Just aired</span>}
+          {tr.freq === 'up' && <span className="tag trend">▲ Airtime +{Math.round(tr.pct * 100)}%</span>}
+          {tr.freq === 'down' && <span className="tag trend">▼ Airtime −{Math.round(-tr.pct * 100)}%</span>}
+          {pd && <span className="tag trend">{pd.dir === 'better' ? (pd.h.lowerIsBetter ? '▼ Price cut' : '▲ Bigger discount') : (pd.h.lowerIsBetter ? '▲ Price up' : '▼ Smaller discount')}</span>}
           {d.newCreative && <span className="tag amber">New creative</span>}
           {ending && <span className="tag amber">Ends soon</span>}
           {c.type === 'Live Read' && <span className="tag amber">Live read</span>}
@@ -968,6 +973,100 @@ function HearIt({ text }) {
       <button type="button" className="ri-btn" onClick={toggle}>{playing ? '■ Stop' : '▶ Listen to ad capture'}</button>
       <span className="muted small">A computer voice reads the words we captured from this ad. We don't store or replay the original audio.</span>
     </div>
+  );
+}
+
+// Where an advertiser is heading: airtime week over week, and its price over the last 8 weeks.
+function trendOf(name) {
+  const w = weekOverWeek([name])[0];
+  const pct = w.last ? (w.now - w.last) / w.last : 0;
+  const freq = pct >= 0.15 ? 'up' : pct <= -0.15 ? 'down' : 'flat';
+  const h = PRICE_HISTORY.find((p) => p.advertiser === name);
+  let price = null;
+  if (h) {
+    const first = h.values[0]; const last = h.values[h.values.length - 1];
+    const better = h.lowerIsBetter ? last < first : last > first;
+    const worse = h.lowerIsBetter ? last > first : last < first;
+    const moves = h.values.filter((v, i) => i > 0 && v !== h.values[i - 1]).length;
+    price = { dir: better ? 'better' : worse ? 'worse' : 'same', first, last, moves, h };
+  }
+  return { w, pct, freq, price, change: OFFER_CHANGES.find((x) => x.advertiser === name) || null };
+}
+const fmtUnit = (v, unit) => (unit === '/mo' ? `${money(v)}/mo` : `${money(v)}${unit}`);
+
+function Spark({ values }) {
+  const W = 84; const H = 22; const lo = Math.min(...values); const hi = Math.max(...values); const span = hi - lo || 1;
+  const pts = values.map((v, i) => `${(i / (values.length - 1)) * W},${H - 2 - ((v - lo) / span) * (H - 4)}`).join(' ');
+  return <svg className="ri-spark" viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>;
+}
+
+// "Insights" for any ad: what their airtime, prices and timing say about where they're going.
+// Read from the ads only (never their books), so it says "reads like", not "they are".
+function AdInsights({ d, events, now }) {
+  const c = d.creative;
+  const name = c.advertiser;
+  const t = trendOf(name);
+  const theirs = events.filter((e) => e.creative.advertiser === name);
+  const lastHr = theirs.filter((e) => e.ts > now - 3600 * 1000).length;
+  const perHr = theirs.length / (WINDOW_MS / 3600000);
+  const stations = new Set(theirs.map((e) => e.station.id)).size;
+  const dayparts = new Set(theirs.map((e) => e.daypart)).size;
+  const left = daysUntil(c.offer);
+  const isNew = c.isNew || d.newCreative;
+  const sig = [];
+
+  if (t.freq === 'up') sig.push({ ic: '▲', h: 'Upping frequency', t: `${Math.round(t.pct * 100)}% more spots than last week (${t.w.now} vs ${t.w.last})` });
+  else if (t.freq === 'down') sig.push({ ic: '▼', h: t.pct <= -0.4 ? 'Getting quiet' : 'Lowering frequency', t: `${Math.round(-t.pct * 100)}% fewer spots than last week (${t.w.now} vs ${t.w.last})` });
+  else sig.push({ ic: '■', h: 'Steady frequency', t: `About the same as last week (${t.w.now} vs ${t.w.last} spots)` });
+
+  if (theirs.length >= 3 && lastHr >= 2 && lastHr >= perHr * 1.5) sig.push({ ic: '↗', h: 'Heating up right now', t: `${lastHr} spots in the last hour vs ${perHr.toFixed(1)}/hr on average` });
+  else if (theirs.length >= 3 && lastHr === 0) sig.push({ ic: '↘', h: 'Quiet this hour', t: `No spots in the last hour after ${theirs.length} in the ${PERIOD}` });
+
+  const p = t.price;
+  if (p && p.dir !== 'same') {
+    const disc = !p.h.lowerIsBetter;
+    const head = p.dir === 'better' ? (disc ? 'Bigger discount' : 'Lowering the price') : (disc ? 'Smaller discount' : 'Raising the price');
+    sig.push({ ic: p.dir === 'better' ? (disc ? '▲' : '▼') : (disc ? '▼' : '▲'), h: head,
+      t: `${p.h.product}: ${fmtUnit(p.first, p.h.unit)} → ${fmtUnit(p.last, p.h.unit)} over 8 weeks, ${p.moves} change${p.moves === 1 ? '' : 's'}`, spark: p.h.values });
+  } else if (t.change) {
+    sig.push({ ic: '⇄', h: 'Changed the offer', t: `${t.change.product}: ${t.change.from} → ${t.change.to} (${t.change.date})` });
+  } else if (c.offer.offerType !== 'Brand') {
+    sig.push({ ic: '=', h: 'Price holding', t: 'No change to this offer since we first heard it' });
+  }
+  if (isNew) sig.push({ ic: '✦', h: 'New ad', t: `First heard ${c.firstSeen}` });
+  if (left > 0 && left <= 10) sig.push({ ic: '⏱', h: 'Deadline push', t: `Offer ends in ${Math.ceil(left)} day${Math.ceil(left) === 1 ? '' : 's'} (${c.offer.expires})` });
+  if (theirs.length) sig.push({ ic: '◎', h: 'Reach', t: `${stations} station${stations === 1 ? '' : 's'}, ${dayparts} daypart${dayparts === 1 ? '' : 's'} in the ${PERIOD}` });
+
+  const better = p ? p.dir === 'better' : false;
+  const worse = p ? p.dir === 'worse' : false;
+  let read;
+  if (t.freq === 'up' && better) read = 'Pushing hard: more airtime and a better deal at the same time. That pattern usually means a sales push, often to move inventory.';
+  else if (t.freq === 'up' && worse) read = 'More airtime but a less generous deal. They may be riding strong demand, or incentives ended.';
+  else if (t.freq === 'up') read = 'Same deal, more airtime: they believe this offer works and are buying more reach.';
+  else if (t.freq === 'down' && better) read = 'Fewer spots but a better deal: leaning on price instead of airtime, possibly a tighter budget.';
+  else if (t.freq === 'down') read = 'Pulling back on air. Could be a budget cut, the end of a flight, or a pause before a new offer. Watch for a new ad.';
+  else if (better) read = 'Same airtime, better deal: they are competing on price.';
+  else if (worse) read = 'Same airtime, less generous deal: they may not feel price pressure right now.';
+  else read = 'Business as usual: steady airtime, steady offer.';
+  if (left > 0 && left <= 10) read += ` The offer ends in ${Math.ceil(left)} days, so expect a final push.`;
+  if (isNew) read += ' New ads usually run heaviest in their first week or two.';
+  if (c.auto && new Date(now).getDate() >= 24) read += ' It is month-end, when dealers push to hit targets.';
+
+  return (
+    <section className="ri-insights" aria-label={`Insights on ${name}`}>
+      <span className="ri-eyebrow">Insights · where {name} is heading</span>
+      <ul>
+        {sig.map((s) => (
+          <li key={s.h}>
+            <span className="ic" aria-hidden="true">{s.ic}</span>
+            <span className="tx"><b>{s.h}</b><span>{s.t}</span></span>
+            {s.spark && <Spark values={s.spark} />}
+          </li>
+        ))}
+      </ul>
+      <p className="ri-insights-read"><span className="ri-eyebrow">The read</span><span>{read}</span></p>
+      <p className="ri-insights-foot">Read from their ads (airtime, prices, timing), not their books. Week-over-week numbers are demo data until the recorder runs.</p>
+    </section>
   );
 }
 
@@ -1135,6 +1234,7 @@ function DetailSheet({ d, onClose, watched, toggleWatch, notify, me, events }) {
           <button type="button" className="ri-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
+        <AdInsights d={d} events={events || []} now={Date.now()} />
         {me && <WhereItLands d={d} me={me} events={events || []} />}
 
         <div className={`ri-offer-block ${o.offerType === 'Brand' ? 'brand' : ''}`}>
