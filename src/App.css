@@ -1161,3 +1161,11 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 /* Secondary buttons: a slightly lighter fill and outline so they read as buttons on a dark screen. */
 .ri-btn:not(.primary) { background: #24242c; border-color: rgba(255, 255, 255, 0.26); }
 .ri-btn:not(.primary):hover { background: #2c2c35; border-color: rgba(255, 255, 255, 0.34); }
+
+/* Real ads from the Seattle recorder */
+.ri-demo.ri-real { color: var(--accent); background: var(--accent-soft); }
+.tag.real { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.ri-minifeed .b .tag.real.mini { display: inline-block; margin-left: 6px; padding: 0 5px; font-size: 0.62rem; color: var(--accent); vertical-align: middle; }
+.ri-realtoday { border: 1px solid var(--accent); margin-bottom: 14px; }
+.ri-real-stations { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.ri-realtoday > .ri-btn { margin-top: 8px; }

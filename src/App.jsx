@@ -7,6 +7,7 @@ import {
 } from './data.js';
 import { WEB_CAPTURED, WEB_SITES, WEB_OFFERS } from './webdeals.js';
 import { ROSTER } from './roster.js';
+import { fetchReal } from './real.js';
 
 const IS_PREVIEW = typeof window !== 'undefined' && !!window.__RI_PREVIEW__;
 const LIVE_INTERVAL_MS = 4000;
@@ -211,6 +212,8 @@ function downloadCSV(rows) {
 export default function App() {
   const [tab, setTab] = useState('today');
   const [events, setEvents] = useState(() => seedDetections());
+  // Real ads from the Seattle recorder (only when the app is opened from the server).
+  const [real, setReal] = useState(null);
   const [live, setLive] = useState(true);
   const [now, setNow] = useState(Date.now());
   const [market, setMarket] = useState(() => store('ri.market', HOME_MARKET));
@@ -275,6 +278,22 @@ export default function App() {
   }, [live]);
 
   useEffect(() => {
+    let stop = false;
+    const pull = async () => {
+      try {
+        const r = await fetchReal();
+        if (stop) return;
+        setReal(r);
+        const cut = Date.now() - WINDOW_MS;
+        setEvents((prev) => [...prev.filter((d) => !d.real), ...r.events.filter((d) => d.ts > cut)].sort((a, b) => b.ts - a.ts));
+      } catch { /* demo site: no feed */ }
+    };
+    pull();
+    const id = setInterval(pull, 20000);
+    return () => { stop = true; clearInterval(id); };
+  }, []);
+
+  useEffect(() => {
     if (!toast) return undefined;
     const id = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(id);
@@ -295,7 +314,7 @@ export default function App() {
       if (adv.newOnly && !d.newCreative) return false;
       if (adv.promoOnly && !c.offer.promoCode) return false;
       if (adv.expiringSoon && !(daysUntil(c.offer) <= 7)) return false;
-      if (d.confidence < adv.minConf) return false;
+      if (!d.real && d.confidence < adv.minConf) return false;
       if (!q) return true;
       const o = c.offer;
       return [c.advertiser, c.city, d.station.market, d.station.call, o.headline, o.product, o.price, c.category, o.promoCode]
@@ -349,7 +368,7 @@ export default function App() {
 
   return (
     <div className="ri-app">
-      <Header live={live} setLive={setLive} me={me} chooseMe={chooseMe} watchCount={watchlist.filter((n) => n !== me).length} market={market} />
+      <Header real={real} live={live} setLive={setLive} me={me} chooseMe={chooseMe} watchCount={watchlist.filter((n) => n !== me).length} market={market} />
 
       {toast && (
         <div className={`ri-toast ${toast.kind}`} role="status">
@@ -362,6 +381,7 @@ export default function App() {
       )}
 
       <main className="ri-main">
+        {tab === 'today' && real && <RealToday real={real} now={now} onOpen={setSelected} />}
         {tab === 'today' && <TodayView events={events} now={now} me={me} watchlist={watchlist} toggleWatch={toggleWatch} onOpen={setSelected} goTo={setTab} market={market} />}
         {tab === 'live' && (
           <LiveView events={filtered} allEvents={events} allCount={events.length} now={now} onOpen={setSelected}
@@ -508,7 +528,7 @@ function MeBar({ me, chooseMe, watchCount, market = 'All' }) {
   );
 }
 
-function Header({ live, setLive, me, chooseMe, watchCount, market = 'All' }) {
+function Header({ real, live, setLive, me, chooseMe, watchCount, market = 'All' }) {
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
     const id = setInterval(() => setClock(new Date()), 1000);
@@ -527,7 +547,9 @@ function Header({ live, setLive, me, chooseMe, watchCount, market = 'All' }) {
         </div>
       </div>
       <div className="ri-header-actions">
-        <span className="ri-demo" title="Station names are real; every detection and offer is simulated">Demo<span className="wide"> data</span></span>
+        {real
+          ? <span className="ri-demo ri-real" title="Real ads recorded on 6 Seattle stations are mixed in and marked Real; everything else is demo">Real<span className="wide"> + demo</span></span>
+          : <span className="ri-demo" title="Station names are real; every detection and offer is simulated">Demo<span className="wide"> data</span></span>}
         <button type="button" className={`ri-live ${live ? 'on' : ''}`} onClick={() => setLive(!live)} aria-pressed={live}>
           <span className="dot" />{live ? 'Live' : 'Paused'}
         </button>
@@ -1096,6 +1118,46 @@ function CompetitorMeter({ events, me, watchlist, toggleWatch, now, onOpen, mark
 }
 
 // Newest ads from you and the businesses you track.
+// Real ads recorded today by the Seattle server, newest first. Fills in as breaks are heard.
+function RealToday({ real, now, onOpen }) {
+  const [open, setOpen] = useState(false);
+  const start = new Date(now); start.setHours(0, 0, 0, 0);
+  const today = real.events.filter((d) => d.ts >= start.getTime());
+  const list = open ? today : today.slice(0, 8);
+  const advs = new Set(today.map((d) => d.creative.advertiser)).size;
+  const label = (st) => (typeof st.status === 'string' ? st.status : st.status?.status || st.status?.state || '');
+  return (
+    <section className="ri-panel ri-minifeed ri-realtoday" aria-label="Real ads heard today">
+      <div className="ri-panel-head">
+        <h2><span className="ri-live-dot" aria-hidden="true" />Real ads heard today</h2>
+        <span className="ri-count">{today.length} plays · {advs} advertisers · updated {timeOf(real.at)}</span>
+      </div>
+      <p className="muted small">Recorded off the air on {real.stations.length} Seattle stations. Everything below this box is still demo data.</p>
+      {real.stations.length > 0 && (
+        <div className="ri-real-stations">
+          {real.stations.map((st) => {
+            const l = label(st);
+            return <span key={st.call} className={`tag ${/BLACK|OFF|DOWN/i.test(l) ? 'amber' : ''}`} title={l}>{st.call}{/BREAK/i.test(l) ? ' · in break' : /BLACK/i.test(l) ? ' · blacked out' : ''}</span>;
+          })}
+        </div>
+      )}
+      {today.length === 0 && <p className="muted small">No ads heard yet today. They show up here within a few minutes of airing.</p>}
+      <ul>
+        {list.map((d) => (
+          <li key={d.id}>
+            <button type="button" className={now - d.ts < 15 * 60000 ? 'fresh' : ''} onClick={() => onOpen(d)}>
+              <span className="t mono">{timeOf(d.ts)}</span>
+              <span className="b"><b>{d.creative.advertiser}</b><span>{d.creative.offer.headline}</span></span>
+              <span className="st">{d.station.call}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {today.length > 8 && <button type="button" className="ri-btn ghost small" onClick={() => setOpen(!open)}>{open ? 'Show fewer' : `Show all ${today.length}`}</button>}
+    </section>
+  );
+}
+
 function MiniFeed({ events, names, now, onOpen, title, limit = 12, empty }) {
   const list = events.filter((d) => !names || names.includes(d.creative.advertiser)).slice(0, limit);
   return (
@@ -1107,7 +1169,7 @@ function MiniFeed({ events, names, now, onOpen, title, limit = 12, empty }) {
           <li key={d.id}>
             <button type="button" className={now - d.ts < 10000 ? 'fresh' : ''} onClick={() => onOpen(d)}>
               <span className="t mono">{timeOf(d.ts)}</span>
-              <span className="b"><b>{d.creative.advertiser}</b><span>{d.creative.offer.headline}</span></span>
+              <span className="b"><b>{d.creative.advertiser}{d.real && <span className="tag real mini">Real</span>}</b><span>{d.creative.offer.headline}</span></span>
               <span className="st">{d.station.call}</span>
             </button>
           </li>
@@ -1155,8 +1217,8 @@ function FeedCard({ d, now, onOpen }) {
   const fresh = now - d.ts < 10000;
   const brand = o.offerType === 'Brand';
   const ending = daysUntil(o) <= 7;
-  const tr = trendOf(c.advertiser);
-  const pd = tr.price && tr.price.dir !== 'same' ? tr.price : null;
+  const tr = d.real ? { freq: 'flat' } : trendOf(c.advertiser);
+  const pd = !d.real && tr.price && tr.price.dir !== 'same' ? tr.price : null;
   return (
     <li>
       <button type="button" className={`ri-card ${fresh ? 'fresh' : ''}`} onClick={() => onOpen(d)}>
@@ -1178,6 +1240,7 @@ function FeedCard({ d, now, onOpen }) {
           </p>
         )}
         <div className="ri-tags">
+          {d.real && <span className="tag real">Real · heard on air</span>}
           {fresh && <span className="tag new">Just aired</span>}
           {tr.freq === 'up' && <span className="tag trend">▲ Airtime +{Math.round(tr.pct * 100)}%</span>}
           {tr.freq === 'down' && <span className="tag trend">▼ Airtime −{Math.round(-tr.pct * 100)}%</span>}
@@ -1188,8 +1251,8 @@ function FeedCard({ d, now, onOpen }) {
           {o.promoCode && <span className="tag">Code {o.promoCode}</span>}
           {c.notSpoken.length > 0 && <span className="tag tv">{c.notSpoken.length} fine-print terms</span>}
           <span className="tag">{d.daypart}</span>
-          <span className="tag mono">{d.confidence}%</span>
-          <span className="ri-cost">est. {money(d.estCost)}</span>
+          <span className="tag mono">{d.real ? `${d.confidence} confidence` : `${d.confidence}%`}</span>
+          {!d.real && <span className="ri-cost">est. {money(d.estCost)}</span>}
         </div>
       </button>
     </li>
@@ -1255,7 +1318,7 @@ function Spark({ values }) {
 function AdInsights({ d, events, now }) {
   const c = d.creative;
   const name = c.advertiser;
-  const t = trendOf(name);
+  const t = c.real ? { freq: 'none', w: {} } : trendOf(name);
   const theirs = events.filter((e) => e.creative.advertiser === name);
   const lastHr = theirs.filter((e) => e.ts > now - 3600 * 1000).length;
   const perHr = theirs.length / (WINDOW_MS / 3600000);
@@ -1267,6 +1330,7 @@ function AdInsights({ d, events, now }) {
 
   if (t.freq === 'up') sig.push({ ic: '▲', h: 'Upping frequency', t: `${Math.round(t.pct * 100)}% more spots than last week (${t.w.now} vs ${t.w.last})` });
   else if (t.freq === 'down') sig.push({ ic: '▼', h: t.pct <= -0.4 ? 'Getting quiet' : 'Lowering frequency', t: `${Math.round(-t.pct * 100)}% fewer spots than last week (${t.w.now} vs ${t.w.last})` });
+  else if (t.freq === 'none') sig.push({ ic: '●', h: 'Heard on air', t: 'Recorded on a real Seattle station. Week-over-week trends start once we have a week of recordings.' });
   else sig.push({ ic: '■', h: 'Steady frequency', t: `About the same as last week (${t.w.now} vs ${t.w.last} spots)` });
 
   if (theirs.length >= 3 && lastHr >= 2 && lastHr >= perHr * 1.5) sig.push({ ic: '↗', h: 'Heating up right now', t: `${lastHr} spots in the last hour vs ${perHr.toFixed(1)}/hr on average` });
@@ -1463,8 +1527,9 @@ function DetailSheet({ d, onClose, watched, toggleWatch, notify, me, events }) {
     ['Position', d.pod],
     ['Creative ID', c.id],
     ['First seen', c.firstSeen],
-    ['Match confidence', `${d.confidence}%`],
-    ['Est. cost', money(d.estCost)],
+    ['Match confidence', d.real ? d.confidence : `${d.confidence}%`],
+    ['Est. cost', d.real ? 'Not estimated yet' : money(d.estCost)],
+    ...(d.real ? [['Source', 'Real: recorded off the air by RadioIntel']] : []),
   ];
 
   const copyRow = async () => {
