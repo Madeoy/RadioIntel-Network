@@ -3459,6 +3459,301 @@ function StationLive({ events, now, stationId, setStationId, onOpen }) {
 const CHECK_WINDOWS = [['1h', '1 hr', 1 / 24, 'last hour'], ['24h', '24 hrs', 1, 'last 24 hrs'], ['7d', '7 days', 7, 'last 7 days'], ['30d', '30 days', CHECK_MAX_DAYS, 'last 30 days']];
 const ADVERTISERS = [...new Set(CREATIVES.map((c) => c.advertiser))].sort();
 
+// ---------------------------------------------------------------- spot-by-spot invoice check
+// The station's invoice/affidavit lists every spot it says aired. We read only station, date and
+// time from each line (dollar amounts can be blacked out first) and check each one against what
+// we recorded. Everything runs in the browser: nothing is uploaded or saved.
+const AUDIT_TOL_MS = 10 * 60000; // station's logged time vs the time we heard it
+const RIVAL_GAP_MS = 4 * 60000; // a same-category ad this close is in the same break
+const PRICE_RE = /\$\s?\d[\d,]*(?:\.\d+)?|\b\d[\d,]*\.\d{2}\b/g;
+const redactPrices = (t) => t.replace(PRICE_RE, '[$ hidden]');
+const CALL_RE = /\b([KW][A-Z]{2,3}(?:-(?:FM|AM|TV))?)\b/g;
+const ISO_DATE_RE = /\b(\d{4})-(\d{2})-(\d{2})\b/;
+const US_DATE_RE = /\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/;
+const TIME_RE = /\b(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp])?\.?[Mm]?\.?/;
+const bareCall = (c) => c.replace(/-(FM|AM|TV)$/, '');
+
+function parseSpotLines(text, now) {
+  const byId = new Map(STATIONS.map((s) => [s.id, s]));
+  const byBare = new Map();
+  for (const s of STATIONS) if (!byBare.has(bareCall(s.id)) || s.band === 'FM') byBare.set(bareCall(s.id), s);
+  const lookup = (c) => byId.get(c) || byBare.get(bareCall(c));
+  const claims = [];
+  let skipped = 0;
+  let st = null;
+  let day = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (/\b(printed|page \d|run date)\b/i.test(line)) { skipped += 1; continue; }
+    for (const m of line.matchAll(CALL_RE)) { const s = lookup(m[1]); if (s) { st = s; break; } }
+    const iso = line.match(ISO_DATE_RE);
+    const us = !iso && line.match(US_DATE_RE);
+    if (iso) day = new Date(+iso[1], +iso[2] - 1, +iso[3]);
+    else if (us) {
+      let y = us[3] ? +us[3] : new Date(now).getFullYear();
+      if (y < 100) y += 2000;
+      day = new Date(y, +us[1] - 1, +us[2]);
+      if (!us[3] && day.getTime() > now + 86400000) day.setFullYear(y - 1);
+    }
+    const tm = line.replace(ISO_DATE_RE, ' ').replace(US_DATE_RE, ' ').match(TIME_RE);
+    if (!tm || !st || !day) { skipped += 1; continue; }
+    let h = +tm[1];
+    const ap = tm[3] && tm[3].toLowerCase();
+    if (ap === 'p' && h < 12) h += 12;
+    if (ap === 'a' && h === 12) h = 0;
+    if (h > 23 || +tm[2] > 59) { skipped += 1; continue; }
+    const d = new Date(day); d.setHours(h, +tm[2], 0, 0);
+    claims.push({ id: claims.length, ts: d.getTime(), station: st, line });
+  }
+  return { claims, skipped };
+}
+
+function auditClaims(claims, mine, rivals, recordedFrom, recordedTo) {
+  const used = new Set();
+  const out = claims.map((c) => ({ ...c, status: null, heard: null, rival: null }));
+  // Pass 1: the spot ran at (about) the logged time. Closest pairs win first.
+  const pairs = [];
+  for (const c of out) for (const a of mine) {
+    if (a.station.id !== c.station.id) continue;
+    const dt = Math.abs(a.ts - c.ts);
+    if (dt <= AUDIT_TOL_MS) pairs.push([dt, c, a]);
+  }
+  pairs.sort((x, y) => x[0] - y[0]);
+  for (const [, c, a] of pairs) {
+    if (c.status || used.has(a.id)) continue;
+    c.status = 'ran'; c.heard = a; used.add(a.id);
+  }
+  // Pass 2: whatever is left.
+  for (const c of out.filter((x) => !x.status)) {
+    if (c.station.nc) { c.status = 'unmon'; continue; }
+    if (c.ts < recordedFrom || c.ts > recordedTo) { c.status = 'out'; continue; }
+    const day = new Date(c.ts).toDateString();
+    const left = mine.filter((a) => !used.has(a.id) && a.station.id === c.station.id && new Date(a.ts).toDateString() === day)
+      .sort((x, y) => Math.abs(x.ts - c.ts) - Math.abs(y.ts - c.ts))[0];
+    if (left) { c.status = 'moved'; c.heard = left; used.add(left.id); } else c.status = 'missed';
+  }
+  for (const c of out) {
+    if (!c.heard) continue;
+    const r = rivals.find((a) => a.station.id === c.heard.station.id && Math.abs(a.ts - c.heard.ts) <= RIVAL_GAP_MS);
+    if (r) c.rival = r.creative.advertiser;
+  }
+  return out.sort((a, b) => a.ts - b.ts);
+}
+
+// Demo only: an invoice built from the spots we heard, with a few lines the station
+// can't back up (not heard, or heard at a different time of day).
+function sampleInvoice(name, mine, now) {
+  const radio = mine.filter((a) => a.station.media === 'Radio' && a.ts < now - 30 * 60000);
+  const counts = new Map();
+  for (const a of radio) counts.set(a.station.id, (counts.get(a.station.id) || 0) + 1);
+  let top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([id]) => id);
+  if (!top.length) return '';
+  // Yesterday, a full day, like one page of a monthly invoice.
+  const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0); dayStart.setDate(dayStart.getDate() - 1);
+  const dayEnd = dayStart.getTime() + 86400000;
+  const onDay = (ids) => radio.filter((a) => ids.includes(a.station.id) && a.ts >= dayStart.getTime() && a.ts < dayEnd).sort((a, b) => a.ts - b.ts);
+  let picked = onDay(top);
+  if (picked.length > 40) { top = top.slice(0, 1); picked = onDay(top); }
+  const rng = mulberry(hashStr(name));
+  const fmt = (ts) => {
+    const d = new Date(ts);
+    return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}  ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+  };
+  const clear = (sid, ts) => !radio.some((a) => a.station.id === sid && Math.abs(a.ts - ts) < 3 * AUDIT_TOL_MS);
+  const lines = picked.map((a) => ({ sid: a.station.id, ts: a.ts - Math.floor(rng() * 50000), len: a.creative.length, rate: a.estCost }));
+  // One spot logged in morning drive that we actually heard at another time of day.
+  const off = lines.find((l) => daypartFor(new Date(l.ts)).name !== 'AM Drive');
+  if (off) {
+    for (const [h, m] of [[7, 50], [8, 20], [6, 40], [9, 10]]) {
+      const d = new Date(dayStart); d.setHours(h, m, 0, 0);
+      if (clear(off.sid, d.getTime())) { off.ts = d.getTime(); off.rate = Math.round(off.rate * 1.8); break; }
+    }
+  }
+  // Three morning- and afternoon-drive spots on the invoice that never aired.
+  let added = 0;
+  for (let tries = 0; tries < 60 && added < 3; tries++) {
+    const sid = top[tries % top.length];
+    const d = new Date(dayStart);
+    d.setHours(rng() < 0.6 ? 6 + Math.floor(rng() * 4) : 15 + Math.floor(rng() * 4), Math.floor(rng() * 60), 0, 0);
+    if (clear(sid, d.getTime()) && !lines.some((l) => l.sid === sid && Math.abs(l.ts - d.getTime()) < 3 * AUDIT_TOL_MS)) {
+      lines.push({ sid, ts: d.getTime(), len: 30, rate: 120 + Math.floor(rng() * 80) });
+      added += 1;
+    }
+  }
+  lines.sort((a, b) => a.ts - b.ts);
+  return [
+    `SAMPLE INVOICE / AFFIDAVIT (demo) · Advertiser: ${name}`,
+    'Station   Date      Time      Len  Rate',
+    ...lines.map((l) => `${l.sid.padEnd(9)} ${fmt(l.ts)}  :${l.len}  $${l.rate}.00`),
+  ].join('\n');
+}
+const hashStr = (s) => [...s].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
+function mulberry(seed) {
+  return () => { let t = (seed += 0x6d2b79f5); t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+async function readSpotFile(file) {
+  if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+    const pdfjs = await import('pdfjs-dist');
+    const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+    pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+    const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+    const out = [];
+    for (let p = 1; p <= doc.numPages; p++) {
+      const page = await doc.getPage(p);
+      const rows = new Map();
+      for (const it of (await page.getTextContent()).items) {
+        if (!it.str) continue;
+        const y = Math.round(it.transform[5] / 3);
+        if (!rows.has(y)) rows.set(y, []);
+        rows.get(y).push([it.transform[4], it.str]);
+      }
+      [...rows.entries()].sort((a, b) => b[0] - a[0])
+        .forEach(([, items]) => out.push(items.sort((a, b) => a[0] - b[0]).map((x) => x[1]).join(' ')));
+    }
+    return out.join('\n');
+  }
+  return file.text();
+}
+
+const AUDIT_LABEL = {
+  ran: ['ok', '✓ Ran'], moved: ['extra', 'Wrong time'], missed: ['short', 'Not heard'],
+  out: ['muted', 'Not recorded yet'], unmon: ['muted', "Station we don't record"],
+};
+
+function SpotAudit({ name, events, now, cutoff, copy }) {
+  const [hide, setHide] = useState(true);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const fileRef = useRef(null);
+  useEffect(() => { setText(''); setErr(''); }, [name]);
+
+  const recordedFrom = now - CHECK_MAX_DAYS * 86400000;
+  const hourKey = Math.floor(now / 3600000);
+  const me = CREATIVES.find((c) => c.advertiser === name);
+  const mine = useMemo(() => {
+    const hist = airingHistory(name, recordedFrom, Math.min(cutoff, now));
+    return [...events.filter((d) => d.creative.advertiser === name), ...hist];
+  }, [name, hourKey, events.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const parsed = useMemo(() => (text.trim() ? parseSpotLines(text, now) : { claims: [], skipped: 0 }), [text]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rivals = useMemo(() => {
+    if (!parsed.claims.length || !me) return [];
+    const lo = Math.min(...parsed.claims.map((c) => c.ts)) - 86400000;
+    const hi = Math.max(...parsed.claims.map((c) => c.ts)) + 86400000;
+    const names = [...new Set(CREATIVES.filter((c) => c.category === me.category && c.advertiser !== name && (!c.market || !me.market || c.market === me.market)).map((c) => c.advertiser))];
+    return [
+      ...events.filter((d) => names.includes(d.creative.advertiser)),
+      ...names.flatMap((n) => airingHistory(n, Math.max(lo, recordedFrom), Math.min(hi, cutoff, now))),
+    ];
+  }, [parsed, name]); // eslint-disable-line react-hooks/exhaustive-deps
+  const results = useMemo(() => auditClaims(parsed.claims, mine, rivals, recordedFrom, now), [parsed, mine, rivals]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const n = (s) => results.filter((r) => r.status === s).length;
+  const ran = n('ran'); const moved = n('moved'); const missed = n('missed');
+  const nextToRival = results.filter((r) => r.rival).length;
+  const isSample = text.startsWith('SAMPLE INVOICE');
+
+  const take = (t) => setText(hide ? redactPrices(t) : t);
+  const onFile = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    setErr(''); setBusy(true);
+    try {
+      const t = await readSpotFile(f);
+      if (!t.trim()) setErr("We couldn't find any text in that file. A scanned paper invoice is a photo inside a PDF; reading those needs our server (coming with the recorder).");
+      take(t);
+    } catch {
+      setErr("We couldn't read that file. Try a PDF, CSV or text export from the station, or paste the spot lines below.");
+    } finally { setBusy(false); }
+  };
+  const when = (ts) => new Date(ts).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const note = () => [
+    `${name}: spot-by-spot check of the station invoice${isSample ? ' (SAMPLE)' : ''}`,
+    `${results.length} spots listed · ${ran} heard as logged · ${moved} heard at a different time · ${missed} not heard`,
+    ...results.filter((r) => r.status === 'missed').map((r) => `NOT HEARD: ${r.station.call} ${when(r.ts)}`),
+    ...results.filter((r) => r.status === 'moved').map((r) => `WRONG TIME: ${r.station.call} logged ${when(r.ts)} (${daypartFor(new Date(r.ts)).name}), heard ${when(r.heard.ts)} (${r.heard.daypart})`),
+    ...results.filter((r) => r.rival).map((r) => `SAME BREAK AS A COMPETITOR: ${r.station.call} ${when(r.heard.ts)} next to ${r.rival}`),
+    'Please confirm and schedule makegoods for the spots above.',
+  ].join('\n');
+
+  return (
+    <>
+      <div className="ri-section-head"><h2>Check the station's invoice, spot by spot</h2><span className="ri-count">what they say aired vs what we heard</span></div>
+      <p className="ri-feed-explain">
+        Each month the station sends an invoice (the "affidavit") listing every spot it says aired. Add it here and we check each line against what we recorded: ran on time, ran at the wrong time of day, or never heard.
+      </p>
+      <label className="ri-audit-priv">
+        <input type="checkbox" checked={hide} onChange={(e) => { setHide(e.target.checked); if (e.target.checked) setText((t) => redactPrices(t)); }} />
+        <span><b>Hide what I paid</b> (recommended). Dollar amounts are blacked out before anything is read. We only need station, date and time.</span>
+      </label>
+      <div className="ri-audit-in">
+        <button type="button" className="ri-btn" onClick={() => fileRef.current && fileRef.current.click()} disabled={busy}>{busy ? 'Reading…' : 'Choose invoice file'}</button>
+        <input ref={fileRef} type="file" hidden accept=".pdf,.csv,.tsv,.txt,application/pdf,text/*" onChange={onFile} />
+        <button type="button" className="ri-link" onClick={() => take(sampleInvoice(name, mine, now))}>Try a sample invoice</button>
+        {text && <button type="button" className="ri-link" onClick={() => setText('')}>Clear</button>}
+      </div>
+      <textarea className="ri-audit-text" rows={text ? 7 : 3} value={text} onChange={(e) => take(e.target.value)}
+        placeholder="…or paste the spot lines here (station, date, time on each line)" spellCheck={false} />
+      <p className="muted small">PDF, CSV or text exports. Read on this device: nothing is uploaded or saved. Photos of paper invoices come later, since they need our server to read them.</p>
+      {err && <p className="ri-empty">{err}</p>}
+
+      {text.trim() && results.length === 0 && (
+        <p className="ri-empty">No spot lines found. Each line needs a station's call letters (e.g. KPLZ), a date and a time.</p>
+      )}
+      {results.length > 0 && (
+        <>
+          {isSample && <p className="muted small"><b>Sample:</b> built from the demo spots, with a few lines added that the station can't back up.</p>}
+          <div className="ri-onair-stats wide">
+            <div><b>{results.length}</b><span>spots listed</span></div>
+            <div><b>{ran}</b><span>heard as logged</span></div>
+            <div><b>{moved}</b><span>wrong time</span></div>
+            <div><b>{missed}</b><span>not heard</span></div>
+          </div>
+          {missed + moved + nextToRival > 0 ? (
+            <div className="ri-beat threat">
+              <b>{[missed && `${missed} spot${missed > 1 ? 's' : ''} not heard`, moved && `${moved} at a different time of day than billed`, nextToRival && `${nextToRival} in the same break as a competitor`].filter(Boolean).join(' · ')}</b>
+              <span className="muted">Ask the station rep to confirm and schedule makegoods.</span>
+              <button type="button" className="ri-link" onClick={() => copy(note(), 'Makegood note copied')}>Copy a note to the rep →</button>
+            </div>
+          ) : (
+            <div className="ri-beat ok"><b>✓ Every spot we could check ran as logged.</b></div>
+          )}
+          <div className="ri-table-wrap">
+            <table className="ri-table ri-check-table ri-audit-table">
+              <thead><tr><th>Station says</th><th>Station</th><th>What we heard</th></tr></thead>
+              <tbody>
+                {results.map((r) => {
+                  const [cls, label] = AUDIT_LABEL[r.status];
+                  return (
+                    <tr key={r.id}>
+                      <td>{new Date(r.ts).toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}<br /><b>{timeOf(r.ts)}</b></td>
+                      <td><b>{r.station.id}</b></td>
+                      <td>
+                        {cls === 'muted' ? <span className="muted small">{label}</span> : <span className={`ri-check-tag ${cls}`}>{label}</span>}
+                        {r.status === 'ran' && <span className="muted small"> {timeOf(r.heard.ts)}</span>}
+                        {r.status === 'moved' && <span className="muted small"> heard {timeOf(r.heard.ts)}{r.heard.daypart !== daypartFor(new Date(r.ts)).name ? `, ${r.heard.daypart} instead of ${daypartFor(new Date(r.ts)).name}` : ''}</span>}
+                        {r.rival && <div className="ri-audit-rival">⚠ Same break as {r.rival}</div>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {parsed.skipped > 0 && <p className="muted small">Skipped {parsed.skipped} line{parsed.skipped > 1 ? 's' : ''} without a station, date and time (headers, totals).</p>}
+          <p className="muted small">
+            "Heard as logged" = within {AUDIT_TOL_MS / 60000} minutes of the station's time (stream and log clocks differ a little). "Same break" = a same-category ad within {RIVAL_GAP_MS / 60000} minutes. We check only stations we record, over the last {CHECK_MAX_DAYS} days. Demo: older spots are simulated.
+          </p>
+        </>
+      )}
+    </>
+  );
+}
+
 function CheckView({ events, now, me, onOpen, notify }) {
   const [name, setName] = useState(() => (me && ADVERTISERS.includes(me) ? me : ''));
   const [typed, setTyped] = useState(name);
@@ -3648,6 +3943,8 @@ function CheckView({ events, now, me, onOpen, notify }) {
             </div>
           ))}
           {orderIds.length > 0 && days !== 7 && days >= 1 && <p className="muted small">Bought is your weekly count spread over the {winLabel}, so ≈ is a pro-rated target. Flights that skip days can look short on a single day; the 7-day view is exact.</p>}
+
+          <SpotAudit name={name} events={events} now={now} cutoff={cutoff} copy={copy} />
 
           <div className="ri-section-head"><h2>Airing log</h2><span className="ri-count">newest first · tap for the ad</span></div>
           <button type="button" className="ri-link" onClick={() => copy(toTSV(airings), `${airings.length} spots copied`)}>Copy the log for Google Sheets →</button>

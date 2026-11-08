@@ -1020,6 +1020,13 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-check-add input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .ri-check-add input[type="number"]::-webkit-inner-spin-button,
 .ri-check-add input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.ri-audit-priv { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 0.85rem; margin: 8px 0 10px; }
+.ri-audit-priv input { margin-top: 3px; flex: none; width: 18px; height: 18px; accent-color: var(--accent-fill, var(--accent)); }
+.ri-audit-in { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 8px; }
+.ri-audit-text { width: 100%; box-sizing: border-box; min-width: 0; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; color: var(--fg); padding: 10px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; line-height: 1.45; resize: vertical; white-space: pre; overflow-wrap: normal; overflow-x: auto; }
+.ri-audit-table td:first-child { font-size: 0.8rem; white-space: nowrap; }
+.ri-audit-table td:nth-child(2) { white-space: nowrap; }
+.ri-audit-rival { color: var(--amber); font-size: 0.75rem; font-weight: 700; margin-top: 3px; }
 
 /* ================= restructure: Today, grouped tabs, More menu ================= */
 .ri-purpose { margin: 12px 0 8px; font-size: 0.85rem; color: var(--muted); line-height: 1.45; }
