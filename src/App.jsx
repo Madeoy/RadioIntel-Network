@@ -152,6 +152,18 @@ function VsBadge({ cmp }) {
 
 const DEFAULT_ADV = { daypart: 'All', length: 'All', adType: 'All', band: 'All', newOnly: false, promoOnly: false, expiringSoon: false, minConf: 94 };
 
+function useIsPhone() {
+  const q = '(max-width: 1023px)';
+  const [m, setM] = useState(() => typeof window !== 'undefined' && window.matchMedia(q).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(q);
+    const on = () => setM(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return m;
+}
+
 function store(key, fallback) {
   try {
     const v = JSON.parse(localStorage.getItem(key));
@@ -197,7 +209,7 @@ function downloadCSV(rows) {
 // ------------------------------------------------------------------ app
 
 export default function App() {
-  const [tab, setTab] = useState('live');
+  const [tab, setTab] = useState('today');
   const [events, setEvents] = useState(() => seedDetections());
   const [live, setLive] = useState(true);
   const [now, setNow] = useState(Date.now());
@@ -214,9 +226,9 @@ export default function App() {
   // The client's own company. Every "vs you" comparison in the app is against it.
   const [me, setMe] = useState(() => store('ri.me.v1', 'Puget Sound Toyota'));
   const [toast, setToast] = useState(null);
-  // Station to open in Stations > On air now (set from the Live tab or a stream row).
+  // Station to open in Live > One station (set from a Stations stream row).
   const [onAir, setOnAir] = useState(null);
-  const openStation = (id) => { setOnAir(id || 'pick'); setTab('stations'); window.scrollTo({ top: 0 }); };
+  const openStation = (id) => { setOnAir(id || 'pick'); setTab('live'); window.scrollTo({ top: 0 }); };
   const watchRef = useRef(watchlist);
   const alertsRef = useRef(alertsOn);
   const beatRef = useRef(beatAlerts);
@@ -350,20 +362,20 @@ export default function App() {
       )}
 
       <main className="ri-main">
+        {tab === 'today' && <TodayView events={events} now={now} me={me} watchlist={watchlist} toggleWatch={toggleWatch} onOpen={setSelected} goTo={setTab} market={market} />}
         {tab === 'live' && (
-          <LiveView events={filtered} allCount={events.length} now={now} onOpen={setSelected}
-            watchlist={watchlist} toggleWatch={toggleWatch} goTo={setTab} me={me} setMe={setMe} openStation={openStation} {...filterProps} />
+          <LiveView events={filtered} allEvents={events} allCount={events.length} now={now} onOpen={setSelected}
+            watchlist={watchlist} goTo={setTab} me={me} onAir={onAir} clearOnAir={() => setOnAir(null)} {...filterProps} />
         )}
-        {tab === 'offers' && <OffersView events={filtered} onAdvertiser={showAdvertiser} me={me} {...filterProps} />}
-        {tab === 'trends' && (
-          <TrendsView events={filtered} crossMedia={crossMedia} allEvents={events} watchlist={watchlist} toggleWatch={toggleWatch} onAdvertiser={showAdvertiser} me={me} {...filterProps} />
+        {tab === 'deals' && <DealsView events={filtered} onAdvertiser={showAdvertiser} me={me} chooseMe={chooseMe} filterProps={filterProps} />}
+        {tab === 'market' && (
+          <MarketView events={filtered} crossMedia={crossMedia} allEvents={events} watchlist={watchlist} toggleWatch={toggleWatch}
+            onAdvertiser={showAdvertiser} me={me} setMe={setMe} filterProps={filterProps} />
         )}
-        {tab === 'web' && <WebDealsView me={me} chooseMe={chooseMe} />}
-        {tab === 'mix' && <MixView crossMedia={crossMedia} market={market} category={category} me={me} setMe={setMe} onAdvertiser={showAdvertiser} />}
-        {tab === 'stations' && <StationsView events={events} now={now} onAdvertiser={showAdvertiser} onOpen={setSelected} onAir={onAir} clearOnAir={() => setOnAir(null)} />}
         {tab === 'check' && <CheckView events={events} now={now} me={me} onOpen={setSelected} notify={notify} />}
-        {tab === 'export' && (
-          <ExportView rows={filtered} market={market} city={city} category={category} query={query} media={media}
+        {tab === 'stations' && <StationsView events={events} now={now} onAdvertiser={showAdvertiser} onOpen={setSelected} openStation={openStation} />}
+        {tab === 'sheets' && (
+          <SheetsView rows={filtered} market={market} city={city} category={category} query={query} media={media}
             watchlist={watchlist} toggleWatch={toggleWatch} alertsOn={alertsOn} setAlertsOn={setAlertsOn}
             beatAlerts={beatAlerts} setBeatAlerts={setBeatAlerts} me={me} notify={notify} />
         )}
@@ -448,7 +460,7 @@ function MeBar({ me, chooseMe, watchCount, market = 'All' }) {
     ? 'Just browsing · no business picked. Pick one to compare every ad against it.'
     : c
     ? `${c.category} · ${c.market || 'all markets'} · comparing with ${watchCount} competitor${watchCount === 1 ? '' : 's'}`
-    : site ? 'Not heard on air yet · real website deals on the Websites tab'
+    : site ? 'Not heard on air yet · real website deals in Deals › On their websites'
       : 'Watching · no ads heard yet. Data starts the moment they air.';
   let i = -1;
   return (
@@ -525,27 +537,50 @@ function Header({ live, setLive, me, chooseMe, watchCount, market = 'All' }) {
   );
 }
 
+// Phone bar: the first five plus More. A computer shows all of them in the side menu.
 const NAV = [
+  ['today', 'Today', 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'],
   ['live', 'Live', 'M3 12h3l3-8 4 16 3-8h5'],
-  ['offers', 'Offers', 'M20 12l-8 8-9-9V3h8zM7.5 7.5h.01'],
-  ['web', 'Websites', 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18'],
-  ['trends', 'Trends', 'M3 3v18h18M7 15l4-4 3 3 6-7'],
-  ['mix', 'Media', 'M4 5h16v11H4zM8 20h8M12 16v4'],
-  ['stations', 'Stations', 'M5 9a10 10 0 0 1 14 0M8 12a6 6 0 0 1 8 0M12 15v6M9 21h6'],
-  ['check', 'Ad Check', 'M9 12l2 2 4-4M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18'],
-  ['export', 'Export', 'M12 3v12M7 10l5 5 5-5M4 21h16'],
+  ['deals', 'Deals', 'M20 12l-8 8-9-9V3h8zM7.5 7.5h.01'],
+  ['market', 'Market', 'M3 3v18h18M7 15l4-4 3 3 6-7'],
+  ['check', 'My Ads', 'M9 12l2 2 4-4M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18'],
+  ['sheets', 'Sheets & Alerts', 'M4 4h16v16H4zM4 10h16M4 15h16M10 4v16', true],
+  ['stations', 'Stations', 'M5 9a10 10 0 0 1 14 0M8 12a6 6 0 0 1 8 0M12 15v6M9 21h6', true],
 ];
 
+function NavIcon({ path }) {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d={path} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
 function BottomNav({ tab, setTab }) {
+  const [more, setMore] = useState(false);
+  const go = (id) => { setTab(id); setMore(false); window.scrollTo({ top: 0 }); };
+  const inMore = NAV.some((n) => n[3] && n[0] === tab);
   return (
-    <nav className="ri-nav" aria-label="Sections">
-      {NAV.map(([id, label, path]) => (
-        <button key={id} type="button" className={tab === id ? 'active' : ''} onClick={() => { setTab(id); window.scrollTo({ top: 0 }); }}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={path} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          <span>{label}</span>
+    <>
+      {more && (
+        <div className="ri-more-wrap" onClick={() => setMore(false)}>
+          <div className="ri-more-menu" role="menu" onClick={(e) => e.stopPropagation()}>
+            {NAV.filter((n) => n[3]).map(([id, label, path]) => (
+              <button key={id} type="button" role="menuitem" className={tab === id ? 'active' : ''} onClick={() => go(id)}>
+                <NavIcon path={path} />
+                <span><b>{label}</b><small>{id === 'stations' ? 'For station sales teams' : 'Your data in Google Sheets, plus alert settings'}</small></span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <nav className="ri-nav" aria-label="Sections">
+        {NAV.map(([id, label, path, extra]) => (
+          <button key={id} type="button" className={`${tab === id ? 'active' : ''} ${extra ? 'extra' : ''}`} onClick={() => go(id)}>
+            <NavIcon path={path} /><span>{label}</span>
+          </button>
+        ))}
+        <button type="button" className={`more ${more || inMore ? 'active' : ''}`} onClick={() => setMore(!more)} aria-expanded={more}>
+          <NavIcon path="M5 12h.01M12 12h.01M19 12h.01" /><span>More</span>
         </button>
-      ))}
-    </nav>
+      </nav>
+    </>
   );
 }
 
@@ -584,7 +619,7 @@ function Filters({ market, setMarket, category, setCategory, city, setCity, quer
         <div className="ri-quick">
           {search}
           <button type="button" className={`ri-filter-btn ${panel || changed ? 'on' : ''}`} onClick={() => setPanel(!panel)} aria-expanded={panel}>
-            Filters{changed ? ` · ${changed}` : ''} <span aria-hidden="true">{panel ? '▴' : '▾'}</span>
+            {search ? 'Filters' : [market === 'All' ? 'All markets' : market, media === 'Both' ? 'Radio + TV' : media, category !== 'All' ? category : 'All categories', city && city !== 'All' ? city : null].filter(Boolean).join(' · ')}{changed ? ` · ${changed} set` : ''} <span aria-hidden="true">{panel ? '▴' : '▾'}</span>
           </button>
         </div>
         {tvMissing && <p className="ri-note">TV monitoring covers Seattle in this demo. Switch the market to Seattle to see TV spots.</p>}
@@ -733,174 +768,12 @@ function BeatBanner({ me, watchlist, toggleWatch }) {
             <span className="nm">{name}</span>
             <span className="muted">{cmp.them.veh} · {cmp.them.big}{cmp.them.tru ? ` · ${cmp.them.tru}` : ''}</span>
             <span className="gap">{cmp.short}</span>
-            {!watchlist.includes(name) && <button type="button" className="ri-chip" onClick={() => toggleWatch(name)}>☆ Watch</button>}
+            {!watchlist.includes(name) && <button type="button" className="ri-chip" onClick={() => toggleWatch(name)}>☆ Track</button>}
           </li>
         ))}
       </ul>
       <p className="muted small">Compared on true monthly cost: the payment plus money due at signing, spread over the term. Vehicles differ, so judge the fit.</p>
     </div>
-  );
-}
-
-function WatchingPanel({ events, watchlist, toggleWatch, now, onOpen, goTo, me, setMe, market }) {
-  const [chart, setChart] = useState(null);
-  // "You" is set in the bar at the top. Rivals to add: same category, same market as you.
-  const meCreative = dealOf(me) || CREATIVES.find((c) => c.advertiser === me);
-  const rivals = meCreative
-    ? [...new Set(CREATIVES.filter((c) => c.category === meCreative.category && c.advertiser !== me
-        && (!meCreative.market || !c.market || c.market === meCreative.market)).map((c) => c.advertiser))]
-        .filter((n) => !watchlist.includes(n)).sort()
-    : [];
-  const pickers = (
-    <>
-      {rivals.length > 0 && (
-        <label className="ri-add-rival">
-          <span>Compare with</span>
-          <select value="" onChange={(e) => e.target.value && toggleWatch(e.target.value)}>
-            <option value="">+ Add {/^[aeiou]/i.test(meCreative.category) ? 'an' : 'a'} {meCreative.category.toLowerCase()} competitor…</option>
-            {rivals.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </label>
-      )}
-    </>
-  );
-  if (watchlist.length === 0) {
-    return (
-      <>
-        {pickers}
-        <div className="ri-panel ri-watch-empty">
-          <p><b>You’re not comparing against anyone yet.</b></p>
-          <p className="muted">Use “Compare with” above, tap ☆ on the Trends tab, or tap “Watch” on any ad.</p>
-          <button type="button" className="ri-btn" onClick={() => goTo('trends')}>Pick competitors on Trends</button>
-        </div>
-      </>
-    );
-  }
-  const build = (name) => {
-    const evs = events.filter((d) => d.creative.advertiser === name);
-    return {
-      name, evs, latest: evs[0],
-      stations: new Set(evs.map((d) => d.station.id)).size,
-      spend: evs.reduce((a, d) => a + d.estCost, 0),
-      change: OFFER_CHANGES.find((c) => c.advertiser === name),
-      history: PRICE_HISTORY.find((p) => p.advertiser === name),
-    };
-  };
-  const meCard = build(me);
-  const cards = watchlist.filter((n) => n !== me && sameMarket(n, market)).map(build).sort((a, b) => (b.latest?.ts || 0) - (a.latest?.ts || 0));
-
-  // Your share of voice: your share of all spots in your category and market (current filters, last 3 hrs).
-  const myDeal = meCreative;
-  const sov = (() => {
-    if (!myDeal) return null;
-    const pool = events.filter((d) => d.creative.category === myDeal.category && d.station.market === (myDeal.market || d.station.market));
-    if (!pool.length) return null;
-    const by = new Map();
-    for (const d of pool) by.set(d.creative.advertiser, (by.get(d.creative.advertiser) || 0) + 1);
-    const ranked = [...by.entries()].sort((a, b) => b[1] - a[1]);
-    const idx = ranked.findIndex(([n]) => n === me);
-    return { pct: Math.round(((by.get(me) || 0) / pool.length) * 100), rank: idx + 1, of: ranked.length, leader: ranked[0][0], cat: myDeal.category.toLowerCase() };
-  })();
-
-  return (
-    <>
-    {pickers}
-    <BeatBanner me={me} watchlist={watchlist} toggleWatch={toggleWatch} />
-    <ul className="ri-watch">
-      {[...(me ? [meCard] : []), ...cards].map((w) => {
-        const isMe = w === meCard;
-        const o = w.latest?.creative.offer;
-        const fresh = w.latest && now - w.latest.ts < 15 * 60000;
-        const cmp = isMe ? null : compareDeals(w.name, me);
-        const mo = momentumOf(w.name);
-        const mix = mixOf(w.evs);
-        const open = () => w.history && setChart({ h: w.history, mine: isMe ? null : meCard.history, own: isMe });
-        return (
-          <li key={isMe ? `me-${w.name}` : w.name} className={`ri-watch-card ${isMe ? 'me' : cmp?.status === 'them' ? 'threat' : cmp?.status === 'you' ? 'win' : fresh ? 'hot' : ''} ${w.history ? 'tappable' : ''}`}
-            onClick={open}>
-            <div className="ri-watch-top">
-              <span className="nm">{w.name}{cityOf(w.name) && <span className="ri-city"> · {cityOf(w.name)}</span>}</span>
-              {isMe ? <span className="ri-you-tag">You</span> : (
-                <button type="button" className="ri-star on" onClick={(e) => { e.stopPropagation(); toggleWatch(w.name); }} aria-label={`Stop watching ${w.name}`}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></svg>
-                </button>
-              )}
-            </div>
-            {cmp && (
-              <div className={`ri-vs ${cmp.status}`}>
-                <span><small>Them</small><b>{cmp.them.big}</b><em>{cmp.them.sub}</em>{cmp.them.tru && <em>{cmp.them.tru}</em>}</span>
-                <span className="v">vs</span>
-                <span><small>You</small><b>{cmp.you.big}</b><em>{cmp.you.sub}</em>{cmp.you.tru && <em>{cmp.you.tru}</em>}</span>
-                <span className="verdict">{cmp.status === 'them' ? '⚠ ' : cmp.status === 'you' ? '✓ ' : ''}{cmp.short}{cmp.them.tru ? ' (true cost)' : ''}</span>
-                {!cmp.sameBody && <span className="note">Different vehicle: {cmp.them.veh} vs your {cmp.you.veh}</span>}
-              </div>
-            )}
-            {isMe && sov && (
-              <p className="ri-sov-me">
-                Your share of {sov.cat} airtime: <b>{sov.pct}%</b> · {sov.rank ? <>#{sov.rank} of {sov.of}</> : <>not on air</>}
-                {sov.rank !== 1 && <span className="muted"> · leader: {sov.leader}</span>}
-              </p>
-            )}
-            {!isMe && (
-              <p className="ri-watch-airtime">
-                Airtime, last 3 hrs: them <b>{w.evs.length}</b> spots · <b>{money(w.spend)}</b> est. vs you <b>{meCard.evs.length}</b> · <b>{money(meCard.spend)}</b>
-              </p>
-            )}
-            <div className="ri-mo-row">
-              <MomentumChip m={mo} />
-              <span className="read">{mo.read}</span>
-            </div>
-            {w.latest ? (
-              <>
-                <p className="ri-watch-status">
-                  <span className={`dot ${fresh ? 'on' : ''}`} />
-                  Last aired {ago(w.latest.ts, now)} on {w.latest.station.call}
-                </p>
-                <button type="button" className="ri-watch-offer" onClick={(e) => { e.stopPropagation(); onOpen(w.latest); }}>{o.headline}</button>
-                {w.change && (
-                  <p className="ri-watch-change">
-                    <span className="tag amber">Changed {w.change.date}</span>
-                    <s>{w.change.from}</s> → <b>{w.change.to}</b>
-                  </p>
-                )}
-                <div className="ri-watch-foot">
-                  <div className="nums">
-                    <span><b>{w.evs.length}</b> spots</span>
-                    <span><b>{w.stations}</b> stations</span>
-                    <span><b>{money(w.spend)}</b> est.</span>
-                    {o.expires && <span>Ends <b>{o.expires}</b></span>}
-                  </div>
-                </div>
-                <dl className="ri-mix-mini">
-                  <div><dt>Top stations</dt><dd>{mix.stations.map((s) => `${s.k} ${s.pct}%`).join(' · ')}</dd></div>
-                  <div><dt>When (3 hrs)</dt><dd>{mix.dayparts.map((s) => `${s.k} ${s.pct}%`).join(' · ')}</dd></div>
-                </dl>
-                {w.history && (() => {
-                  const v = w.history.values; const first = v[0]; const last = v[v.length - 1];
-                  const fmt = (n) => (w.history.unit === ' off' ? `$${n.toLocaleString()} off` : `$${n.toLocaleString()}${w.history.unit}`);
-                  return (
-                    <button type="button" className="ri-watch-trend" onClick={(e) => { e.stopPropagation(); open(); }} aria-label={`Open ${w.name} price chart`}>
-                      <span className="lbl">
-                        <span className="prod">{w.history.product} · 8 weeks</span>
-                        <span className="mv">
-                          {fmt(first)} → <b>{fmt(last)}</b>
-                        </span>
-                      </span>
-                      <Sparkline values={v} w={320} h={70} />
-                      <span className="ri-spark-hint">{isMe || !cmp ? 'Tap for full chart ›' : 'Tap to compare on chart ›'}</span>
-                    </button>
-                  );
-                })()}
-              </>
-            ) : (
-              <p className="muted small">{isMe ? 'You haven’t aired in the last 3 hours with these filters.' : 'No spots in the last 3 hours. If they stay off radio, that’s your open lane.'}</p>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-    {chart && <PriceChartSheet h={chart.h} mine={chart.mine} own={chart.own} onClose={() => setChart(null)} />}
-    </>
   );
 }
 
@@ -983,46 +856,296 @@ function WhatChanged({ me, watchlist, events, onOpen }) {
   );
 }
 
-function LiveView({ events, allCount, now, onOpen, watchlist, toggleWatch, goTo, me, setMe, openStation, ...filters }) {
-  const [limit, setLimit] = useState(FEED_PAGE);
-  const [view, setView] = useState('all');
-  const shown = view === 'watching' ? events.filter((d) => watchlist.includes(d.creative.advertiser)) : events;
+// ------------------------------------------------------------------ grouped tabs
+
+// Small section switch used at the top of the grouped tabs. Remembers the last pick per tab.
+function Sections({ id, items, value, onChange }) {
+  return (
+    <div className="ri-seg ri-sections" role="tablist" aria-label={id}>
+      {items.map(([k, label]) => (
+        <button key={k} type="button" role="tab" aria-selected={value === k} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>{label}</button>
+      ))}
+    </div>
+  );
+}
+function useSection(key, fallback) {
+  const [v, setV] = useState(() => store(key, fallback));
+  useEffect(() => save(key, v), [key, v]);
+  return [v, setV];
+}
+
+// Deals: what competitors are offering, on air and on their own websites.
+function DealsView({ events, onAdvertiser, me, chooseMe, filterProps }) {
+  const [part, setPart] = useSection('ri.part.deals', 'air');
   return (
     <>
-      <WhatChanged me={me} watchlist={watchlist} events={events} onOpen={onOpen} />
-      <div className="ri-seg" role="tablist" aria-label="Feed view">
-        <button type="button" role="tab" aria-selected={view === 'all'} className={view === 'all' ? 'on' : ''} onClick={() => setView('all')}>All ads</button>
-        <button type="button" role="tab" aria-selected={view === 'watching'} className={view === 'watching' ? 'on' : ''} onClick={() => setView('watching')}>
-          ★ Watching ({watchlist.length})
-        </button>
-      </div>
-      {view === 'watching' && (
+      <p className="ri-purpose"><b>Deals</b> shows exactly what your competitors are offering shoppers, so you can match or beat it.</p>
+      <Sections id="Deals" value={part} onChange={setPart} items={[['air', 'In their ads'], ['web', 'On their websites']]} />
+      {part === 'air' && <OffersView events={events} onAdvertiser={onAdvertiser} me={me} {...filterProps} />}
+      {part === 'web' && <WebDealsView me={me} chooseMe={chooseMe} />}
+    </>
+  );
+}
+
+// Market: where the money and the airtime go, when, and how prices move.
+function MarketView({ events, crossMedia, allEvents, watchlist, toggleWatch, onAdvertiser, me, setMe, filterProps }) {
+  const phone = useIsPhone();
+  const [part, setPart] = useSection('ri.part.market', 'spend');
+  const purpose = {
+    spend: 'Who is spending the most on advertising, who is speeding up or slowing down, and your share of it.',
+    timing: 'When ads run, hour by hour, so you can buy the best time slots.',
+    prices: 'How each advertised deal has moved over the last 8 weeks.',
+    media: 'Which channels each business is on (radio, TV, cable, streaming) and where you have gaps.',
+  }[part];
+  return (
+    <>
+      <p className="ri-purpose"><b>Market</b>: {purpose}</p>
+      <Sections id="Market" value={part} onChange={setPart} items={[['spend', 'Spending'], ['timing', 'Timing'], ['prices', 'Prices'], ['media', 'All media']]} />
+      {part !== 'media' && <Filters {...filterProps} showSearch={false} showAdvanced={false} compact={phone} />}
+      {part === 'media'
+        ? <MixView crossMedia={crossMedia} market={filterProps.market} category={filterProps.category} me={me} setMe={setMe} onAdvertiser={onAdvertiser} />
+        : <TrendsView part={part} events={events} crossMedia={crossMedia} allEvents={allEvents} watchlist={watchlist} toggleWatch={toggleWatch} onAdvertiser={onAdvertiser} me={me} {...filterProps} />}
+    </>
+  );
+}
+
+// Station sellers: advertisers leaning on one medium, worth a pitch for the other.
+function StationProspects({ events, home }) {
+  const [opp, setOpp] = useState(null);
+  if (home.market !== 'Seattle') return null;
+  const gaps = mediaGaps(events.filter((d) => d.station.market === 'Seattle'));
+  return (
+    <>
+      <div className="ri-section-head"><h2>{home.media === 'TV' ? 'Mostly radio: pitch them TV' : 'Mostly TV: pitch them radio'} <span className="ri-premium">Station Premium</span></h2><span className="ri-count">85%+ of spend on one medium, {PERIOD}</span></div>
+      <GapList rows={home.media === 'TV' ? gaps.needTv : gaps.needRadio} pitch={home.media === 'TV' ? 'tv' : 'radio'} onPick={setOpp} />
+      {opp && <OpportunitySheet o={opp} onClose={() => setOpp(null)} />}
+    </>
+  );
+}
+
+// ------------------------------------------------------------------ live
+
+function LiveView({ events, allEvents, allCount, now, onOpen, watchlist, goTo, me, onAir, clearOnAir, ...filters }) {
+  const [limit, setLimit] = useState(FEED_PAGE);
+  const [view, setView] = useState(onAir ? 'station' : 'all');
+  const [stationId, setStationId] = useState(() => (onAir && onAir !== 'pick' ? onAir : store('ri.home', 'KISW')));
+  useEffect(() => {
+    if (!onAir) return;
+    setView('station');
+    if (onAir !== 'pick') setStationId(onAir);
+    clearOnAir();
+  }, [onAir]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tracked = [me, ...watchlist].filter(Boolean);
+  const shown = view === 'mine' ? events.filter((d) => tracked.includes(d.creative.advertiser)) : events;
+  return (
+    <>
+      <Sections id="Feed view" value={view} onChange={(v) => { setView(v); setLimit(FEED_PAGE); }}
+        items={[['all', 'Every ad'], ['mine', 'Competitors'], ['station', 'One station']]} />
+      {view === 'station' ? (
+        <StationLive events={allEvents} now={now} stationId={stationId} setStationId={setStationId} onOpen={onOpen} />
+      ) : (
         <>
-          <div className="ri-section-head"><h2>Your competitors right now</h2><span className="ri-count">newest first</span></div>
-          <WatchingPanel events={events} watchlist={watchlist} toggleWatch={toggleWatch} now={now} onOpen={onOpen} goTo={goTo} me={me} setMe={setMe} market={filters.market} />
+          <Filters {...filters} compact />
+          <Kpis events={shown} market={filters.market} media={filters.media} category={filters.category} now={now} />
+          <div className="ri-section-head">
+            <h2><span className="ri-live-dot" aria-hidden="true" />{view === 'mine' ? 'You and your competitors' : 'Every ad, as it airs'}</h2>
+            <span className="ri-count">{shown.length.toLocaleString('en-US')} of {allCount.toLocaleString('en-US')} spots · last 3 hrs</span>
+          </div>
+          <p className="ri-feed-explain">
+            Newest on top. Tap any ad for the full offer and how it compares with yours.{' '}
+            <button type="button" className="ri-link" onClick={() => { goTo('sheets'); window.scrollTo({ top: 0 }); }}>Get this in Google Sheets →</button>
+          </p>
+          {view === 'mine' && tracked.length <= 1 && <p className="ri-empty">You're not tracking any competitors yet. Add them on Today.</p>}
+          {shown.length === 0 && <p className="ri-empty">No spots match these filters. Clear the search or loosen a filter.</p>}
+          <ul className="ri-feed">
+            {shown.slice(0, limit).map((d) => <FeedCard key={d.id} d={d} now={now} onOpen={onOpen} />)}
+          </ul>
+          {shown.length > limit && (
+            <button type="button" className="ri-more" onClick={() => setLimit(limit + FEED_PAGE)}>Show {Math.min(FEED_PAGE, shown.length - limit)} more</button>
+          )}
         </>
       )}
-      <Filters {...filters} compact />
-      <Kpis events={events} market={filters.market} media={filters.media} category={filters.category} now={now} />
-      <div className="ri-section-head">
-        <h2><span className="ri-live-dot" aria-hidden="true" />{view === 'watching' ? 'Their latest ads' : 'Live ad feed'}</h2>
-        <span className="ri-count">{shown.length.toLocaleString('en-US')} of {allCount.toLocaleString('en-US')} spots · last 3 hrs</span>
-      </div>
-      {view === 'all' && (
-        <p className="ri-feed-explain">
-          Every ad the moment it airs, newest on top. Tap one for the full offer.{' '}
-          <button type="button" className="ri-link" onClick={() => { goTo('export'); window.scrollTo({ top: 0 }); }}>Send to Google Sheets →</button>{' '}
-          <button type="button" className="ri-link" onClick={() => openStation()}>Watch one station live →</button>
-        </p>
-      )}
-      {shown.length === 0 && <p className="ri-empty">No spots match these filters. Clear the search or loosen a filter.</p>}
-      <ul className="ri-feed">
-        {shown.slice(0, limit).map((d) => <FeedCard key={d.id} d={d} now={now} onOpen={onOpen} />)}
-      </ul>
-      {shown.length > limit && (
-        <button type="button" className="ri-more" onClick={() => setLimit(limit + FEED_PAGE)}>Show {Math.min(FEED_PAGE, shown.length - limit)} more</button>
-      )}
     </>
+  );
+}
+
+// ------------------------------------------------------------------ today (home: you vs your competitors)
+// One screen that answers "how am I doing against my competitors right now?"
+// On a computer it's a 3-column board meant to stay open all day; on a phone it stacks.
+
+// Your share of all spots in your category and market (last 3 hrs).
+function shareOfVoice(events, me) {
+  const mine = dealOf(me) || CREATIVES.find((c) => c.advertiser === me);
+  if (!mine) return null;
+  const pool = events.filter((d) => d.creative.category === mine.category && (!mine.market || d.station.market === mine.market));
+  if (!pool.length) return null;
+  const by = new Map();
+  for (const d of pool) by.set(d.creative.advertiser, (by.get(d.creative.advertiser) || 0) + 1);
+  const ranked = [...by.entries()].sort((a, b) => b[1] - a[1]);
+  const idx = ranked.findIndex(([n]) => n === me);
+  return { pct: Math.round(((by.get(me) || 0) / pool.length) * 100), rank: idx + 1, of: ranked.length, leader: ranked[0][0], cat: mine.category, market: mine.market };
+}
+
+function Tile({ label, value, sub, tone = '', def, onClick }) {
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag type={onClick ? 'button' : undefined} className={`ri-tile ${tone} ${onClick ? 'tap' : ''}`} onClick={onClick}>
+      <span className="l">{label}</span>
+      <span className="v">{value}</span>
+      {sub && <span className="s">{sub}</span>}
+      {def && <span className="d">{def}</span>}
+    </Tag>
+  );
+}
+
+function Scoreboard({ events, me, now, goTo }) {
+  const deal = dealOf(me);
+  const mineAny = deal || CREATIVES.find((c) => c.advertiser === me);
+  const sov = shareOfVoice(events, me);
+  const mo = momentumOf(me);
+  const mySpots = events.filter((d) => d.creative.advertiser === me);
+  const kind = deal ? (deal.auto.monthly ? 'lease' : 'cash') : null;
+  const board = deal ? rankBoard(deal.market, kind) : [];
+  const pos = board.findIndex((x) => x.n === me) + 1;
+  const beats = dealsBeatingMe(me);
+  return (
+    <section className="ri-tiles" aria-label={`Scoreboard for ${me}`}>
+      {deal ? (
+        <Tile label="Your deal" tone={beats.length ? 'them' : 'you'}
+          value={pos ? `#${pos} of ${board.length}` : '–'}
+          sub={beats.length ? `${beats.length} deal${beats.length > 1 ? 's' : ''} on air beat yours` : 'No deal on air beats yours'}
+          def={`Your ${kind === 'lease' ? 'lease' : 'cash-off'} deal ranked against every ${deal.market} dealer ${kind === 'lease' ? 'lease on air, by true monthly cost' : 'cash-off deal on air'}.`}
+          onClick={() => goTo('deals')} />
+      ) : (
+        <Tile label="Your deal" value="–" sub={mineAny ? 'Deal ranking covers car dealers for now' : 'Not on air yet'} def="Ranks your advertised deal against your market." />
+      )}
+      <Tile label="Share of voice" value={sov && sov.rank ? `${sov.pct}%` : '0%'}
+        sub={sov ? (sov.rank ? `#${sov.rank} of ${sov.of} ${sov.cat.toLowerCase()} advertisers${sov.rank !== 1 ? ` · leader ${sov.leader}` : ''}` : `Not heard · leader ${sov.leader}`) : 'No category ads heard yet'}
+        def={`Your share of all ${sov ? sov.cat.toLowerCase() : 'category'} spots heard${sov?.market ? ` in ${sov.market}` : ''}, last 3 hrs.`}
+        onClick={() => goTo('market')} />
+      <Tile label="Your airtime" value={`${mo.pct > 0 ? '+' : ''}${Math.round(mo.pct * 100)}%`}
+        sub={`${mo.last} → ${mo.now} spots, last week → this week`}
+        def="How many spots you ran this week compared with last week, all stations." />
+      <Tile label="Your ads heard" value={mySpots.length}
+        sub={mySpots[0] ? `Last on ${mySpots[0].station.call}, ${ago(mySpots[0].ts, now)}` : 'None in the last 3 hrs'}
+        def="Spots we heard from you in the last 3 hrs. Tap to check them against what you bought."
+        onClick={() => goTo('check')} />
+    </section>
+  );
+}
+
+// One row per competitor: when they last aired, how much, which way they're trending, and their deal vs yours.
+function CompetitorMeter({ events, me, watchlist, toggleWatch, now, onOpen, market }) {
+  const mine = dealOf(me) || CREATIVES.find((c) => c.advertiser === me);
+  const names = watchlist.filter((n) => n !== me && sameMarket(n, market));
+  const rivals = mine
+    ? [...new Set(CREATIVES.filter((c) => c.category === mine.category && c.advertiser !== me && (!mine.market || !c.market || c.market === mine.market)).map((c) => c.advertiser))]
+        .filter((n) => !watchlist.includes(n)).sort()
+    : [];
+  const row = (name, isMe) => {
+    const evs = events.filter((d) => d.creative.advertiser === name);
+    const latest = evs[0];
+    const mo = momentumOf(name);
+    const cmp = isMe ? null : compareDeals(name, me);
+    const d = dealOf(name);
+    const dealTxt = d?.auto ? (d.auto.monthly ? `${money(d.auto.monthly)}/mo · ${money(d.auto.due)} due` : `${money(d.auto.cashOff)} off`) : (latest?.creative.offer.headline || (CREATIVES.find((c) => c.advertiser === name)?.offer.headline) || '–');
+    const veh = d?.auto?.vehicle;
+    return (
+      <li key={name} className={`ri-meter-row ${isMe ? 'me' : ''} ${cmp?.status === 'them' ? 'them' : ''}`}>
+        <button type="button" className="main" onClick={() => latest && onOpen(latest)} disabled={!latest}>
+          <span className="c-name"><b>{name}</b>{isMe && <span className="ri-you-tag">You</span>}{cityOf(name) && <span className="muted"> {cityOf(name)}</span>}</span>
+          <span className="c-last"><span className={`dot ${latest && now - latest.ts < 15 * 60000 ? 'on' : ''}`} />{latest ? `${ago(latest.ts, now)} · ${latest.station.call}` : 'Not heard, 3 hrs'}</span>
+          <span className="c-num"><b>{evs.length}</b><small>spots</small></span>
+          <span className={`c-mo ${mo.dir}`}>{mo.dir === 'up' ? '▲' : mo.dir === 'down' ? '▼' : '■'} {mo.pct > 0 ? '+' : ''}{Math.round(mo.pct * 100)}%</span>
+          <span className="c-deal">{dealTxt}{veh && <small>{veh}</small>}</span>
+          <span className="c-vs">{isMe ? <span className="muted small">baseline</span> : cmp ? <VsBadge cmp={cmp} /> : <span className="muted small" title="One is a lease and the other is cash off, so there's no fair dollar comparison">Different deal type</span>}</span>
+        </button>
+        {isMe ? <span className="ri-x-spacer" aria-hidden="true" /> : <button type="button" className="ri-x" onClick={() => toggleWatch(name)} aria-label={`Stop tracking ${name}`} title="Stop tracking">×</button>}
+      </li>
+    );
+  };
+  return (
+    <section className="ri-panel ri-meter" aria-label="Competitor meter">
+      <div className="ri-panel-head">
+        <h2>Competitor meter</h2>
+        <span className="ri-count">{names.length} tracked · tap a row for their latest ad</span>
+      </div>
+      <div className="ri-meter-cols" aria-hidden="true">
+        <span>Business</span><span>Last heard</span><span>Spots · 3 hrs</span><span>Spots vs last wk</span><span>Current deal</span><span>Vs your deal</span>
+      </div>
+      <ul>
+        {me && row(me, true)}
+        {names.map((n) => row(n, false))}
+      </ul>
+      {names.length === 0 && <p className="muted small">You're not tracking anyone yet. Add a competitor below.</p>}
+      {rivals.length > 0 && (
+        <label className="ri-add-rival">
+          <span>Track another</span>
+          <select value="" onChange={(e) => e.target.value && toggleWatch(e.target.value)}>
+            <option value="">+ Add {mine.category.toLowerCase()} competitor…</option>
+            {rivals.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+      )}
+      <p className="ri-defs">
+        <b>Spots vs last wk</b>: their spot count this week compared with last week (more airtime = pushing harder).{' '}
+        <b>Vs your deal</b>: red = their deal costs a shopper less than yours, green = yours costs less, compared on true monthly cost (payment plus money due spread over the term).
+      </p>
+    </section>
+  );
+}
+
+// Newest ads from you and the businesses you track.
+function MiniFeed({ events, names, now, onOpen, title, limit = 12, empty }) {
+  const list = events.filter((d) => !names || names.includes(d.creative.advertiser)).slice(0, limit);
+  return (
+    <section className="ri-panel ri-minifeed" aria-label={title}>
+      <div className="ri-panel-head"><h2><span className="ri-live-dot" aria-hidden="true" />{title}</h2><span className="ri-count">newest first</span></div>
+      {list.length === 0 && <p className="muted small">{empty}</p>}
+      <ul>
+        {list.map((d) => (
+          <li key={d.id}>
+            <button type="button" className={now - d.ts < 10000 ? 'fresh' : ''} onClick={() => onOpen(d)}>
+              <span className="t mono">{timeOf(d.ts)}</span>
+              <span className="b"><b>{d.creative.advertiser}</b><span>{d.creative.offer.headline}</span></span>
+              <span className="st">{d.station.call}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function TodayView({ events, now, me, watchlist, toggleWatch, onOpen, goTo, market }) {
+  const scoped = events.filter((d) => market === 'All' || d.station.market === market);
+  if (!me) {
+    return (
+      <>
+        <div className="ri-panel ri-today-empty">
+          <h2>Pick your business to see your scoreboard</h2>
+          <p className="muted">Type your business in <b>Insights on</b> at the top. This page then shows how you stack up: your deal rank, your share of voice, each competitor's airtime and deal, and whether your own ads ran.</p>
+        </div>
+        <MiniFeed events={scoped} now={now} onOpen={onOpen} title={`Live: every ad${market !== 'All' ? ` in ${market}` : ''}`} empty="No ads heard yet." />
+      </>
+    );
+  }
+  const tracked = [me, ...watchlist];
+  return (
+    <div className="ri-today">
+      <div className="ri-today-a">
+        <Scoreboard events={scoped} me={me} now={now} goTo={goTo} />
+        <CompetitorMeter events={scoped} me={me} watchlist={watchlist} toggleWatch={toggleWatch} now={now} onOpen={onOpen} market={market} />
+      </div>
+      <div className="ri-today-b">
+        <WhatChanged me={me} watchlist={watchlist} events={scoped} onOpen={onOpen} />
+        <BeatBanner me={me} watchlist={watchlist} toggleWatch={toggleWatch} />
+      </div>
+      <div className="ri-today-c">
+        <MiniFeed events={scoped} names={tracked} now={now} onOpen={onOpen} title="Live: you and your competitors"
+          empty="Nobody you track has aired in the last 3 hours." />
+      </div>
+    </div>
   );
 }
 
@@ -1411,8 +1534,8 @@ function DetailSheet({ d, onClose, watched, toggleWatch, notify, me, events }) {
         {/* Pinned to the bottom of the sheet: watch, copy and close without scrolling. */}
         <div className="ri-sheet-actions ri-dock">
           <button type="button" className={`ri-btn watch ${watched ? 'on' : ''}`} onClick={() => toggleWatch(c.advertiser)} aria-pressed={watched}
-            title={watched ? `Stop watching ${c.advertiser}` : `Watch ${c.advertiser}`}>
-            {watched ? '★ Watching' : '☆ Watch'}
+            title={watched ? `Stop tracking ${c.advertiser}` : `Track ${c.advertiser} as a competitor`}>
+            {watched ? '★ Tracking' : '☆ Track'}
           </button>
           <button type="button" className="ri-btn primary" onClick={copyRow}>Copy for Sheets</button>
           <button type="button" className="ri-btn" onClick={onClose}>Close</button>
@@ -1437,6 +1560,7 @@ function groupByCreative(events) {
 }
 
 function OffersView({ events, onAdvertiser, me, ...filters }) {
+  const phone = useIsPhone();
   const [view, setView] = useState('auto');
   const offers = useMemo(() => groupByCreative(events).sort((a, b) => b.spins - a.spins), [events]);
   const specific = offers.filter((x) => x.c.offer.offerType !== 'Brand');
@@ -1449,7 +1573,7 @@ function OffersView({ events, onAdvertiser, me, ...filters }) {
 
   return (
     <>
-      <Filters {...filters} showSearch={false} />
+      <Filters {...filters} showSearch={false} compact={phone} />
       <div className="ri-seg" role="tablist" aria-label="Offer views">
         {[['auto', 'Auto deal board'], ['all', 'All offers'], ['changes', 'Changes']].map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={view === id} className={view === id ? 'on' : ''} onClick={() => setView(id)}>{label}</button>
@@ -1825,7 +1949,7 @@ function OpportunitySheet({ o, onClose }) {
   );
 }
 
-function RadioVsTv({ crossMedia, market }) {
+function RadioVsTv({ crossMedia, market, dealer = false }) {
   const [picked, setPicked] = useState(null);
   const [opp, setOpp] = useState(null);
   const scoped = market === 'All' || market === 'Seattle' ? crossMedia.filter((d) => d.station.market === 'Seattle') : null;
@@ -1869,12 +1993,14 @@ function RadioVsTv({ crossMedia, market }) {
         <SplitBars rows={byAdv} onPick={setPicked} picked={picked} />
       </div>
 
+      {!dealer && (<>
       <div className="ri-section-head"><h2>Mostly TV: pitch them radio <span className="ri-premium">Station Premium</span></h2><span className="ri-count">85%+ of spend on TV, {PERIOD}</span></div>
       <GapList rows={gaps.needRadio} pitch="radio" onPick={setOpp} />
 
       <div className="ri-section-head"><h2>Mostly radio: pitch them TV <span className="ri-premium">Station Premium</span></h2><span className="ri-count">85%+ of spend on radio, {PERIOD}</span></div>
       <GapList rows={gaps.needTv} pitch="tv" onPick={setOpp} />
       {opp && <OpportunitySheet o={opp} onClose={() => setOpp(null)} />}
+      </>)}
 
       <div className="ri-section-head"><h2>Spend by category</h2><span className="ri-count">est., {PERIOD}</span></div>
       <div className="ri-panel">
@@ -2262,7 +2388,7 @@ function MixView({ crossMedia, market, category, me, setMe, onAdvertiser }) {
   const [open, setOpen] = useState(null);
   const scoped = market === 'All' || market === 'Seattle' ? crossMedia.filter((d) => d.station.market === 'Seattle') : null;
   const rows = useMemo(() => (scoped ? footprints(scoped) : []), [crossMedia, market]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!scoped) return <p className="ri-note">We don't record TV, cable or streaming in {market} yet, so there's no channel mix to show. It turns on when {market}'s TV stations are added. Radio for {market} is on the Live, Offers and Trends tabs.</p>;
+  if (!scoped) return <p className="ri-note">We don't record TV, cable or streaming in {market} yet, so there's no channel mix to show. It turns on when {market}'s TV stations are added. Radio for {market} is on Live, Deals and Market.</p>;
 
   const meCat = (CREATIVES.find((c) => c.advertiser === me) || {}).category;
   const cat = category !== 'All' ? category : meCat;
@@ -2289,7 +2415,6 @@ function MixView({ crossMedia, market, category, me, setMe, onAdvertiser }) {
     }
   }
   const beats = cat && cat === meCat ? dealsBeatingMe(me).slice(0, 4) : [];
-  const single = rows.filter((r) => r.on.length === 1).slice(0, 8);
   const mkt = CHANNELS.reduce((o, c) => ({ ...o, [c.id]: rows.reduce((a, r) => a + r.v[c.id], 0) }), {});
   const mktTotal = CHANNELS.reduce((a, c) => a + mkt[c.id], 0) || 1;
 
@@ -2354,10 +2479,6 @@ function MixView({ crossMedia, market, category, me, setMe, onAdvertiser }) {
           <MixRows rows={cat ? catRows : rows.slice(0, 12)} onPick={setOpen} me={me} />
         </div>
       </div>
-
-      <div className="ri-section-head"><h2>Only on one channel: pitch them the rest <span className="ri-premium">Station Premium</span></h2><span className="ri-count">all categories, {PERIOD}</span></div>
-      <p className="ri-note">A business on just one channel is missing customers who watch and stream. For a station or cable seller, that's the call.</p>
-      <MixRows rows={single} onPick={setOpen} me={me} />
 
       {open && <MixSheet r={open} onClose={() => setOpen(null)} onAdvertiser={onAdvertiser} />}
     </>
@@ -2680,7 +2801,7 @@ function HourDetail({ cell, isPeak, grid, market, category, media, me, events, o
   );
 }
 
-function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onAdvertiser, me, ...filters }) {
+function TrendsView({ part = 'spend', events, crossMedia, allEvents, watchlist, toggleWatch, onAdvertiser, me, ...filters }) {
   const [chart, setChart] = useState(null);
   const { market, category, media } = filters;
   const [cell, setCell] = useState(null);
@@ -2729,10 +2850,9 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
 
   return (
     <>
-      <Filters {...filters} showSearch={false} showAdvanced={false} />
+      {part === 'spend' && <RadioVsTv crossMedia={crossMedia} market={market} dealer />}
 
-      <RadioVsTv crossMedia={crossMedia} market={market} />
-
+      {part === 'timing' && (<>
       <div className="ri-section-head">
         <h2>When ads run{media !== 'Both' ? ` on ${media}` : ''}</h2>
         <span className="ri-count">spots per hour · last 7 days</span>
@@ -2771,6 +2891,9 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
         </div>
       </div>
 
+      </>)}
+
+      {part === 'prices' && (<>
       <div className="ri-section-head"><h2>Price moves</h2><span className="ri-count">8 weeks, {WEEKS[0]} to {WEEKS[WEEKS.length - 1]}</span></div>
       <p className="muted small ri-key">
         Lines show direction only.{me && <> <span className="ri-vs-badge them">⚠ red</span> = their deal beats {me}’s, <span className="ri-vs-badge you">✓ green</span> = {me}’s is better. No color = not comparable.</>}
@@ -2805,6 +2928,9 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
       </ul>
       {chart && <PriceChartSheet h={chart} mine={PRICE_HISTORY.find((x) => x.advertiser === me)} own={chart.advertiser === me} onClose={() => setChart(null)} />}
 
+      </>)}
+
+      {part === 'spend' && (<>
       <div className="ri-section-head"><h2>Rising and falling</h2><span className="ri-count">spots this week vs last</span></div>
       <ul className="ri-wow">
         {rising.map((r) => (
@@ -2860,6 +2986,7 @@ function TrendsView({ events, crossMedia, allEvents, watchlist, toggleWatch, onA
       {sov.length > 10 && (
         <button type="button" className="ri-more" onClick={() => setShowAll(!showAll)}>{showAll ? 'Show top 10' : `Show all ${sov.length}`}</button>
       )}
+      </>)}
     </>
   );
 }
@@ -3019,13 +3146,10 @@ function MyStation({ events, home, hours, now, peers, rank, onAdvertiser, onOpen
   );
 }
 
-function StationsView({ events, now, onAdvertiser, onOpen, onAir, clearOnAir }) {
+function StationsView({ events, now, onAdvertiser, onOpen, openStation }) {
   const [home, setHome] = useState(() => store('ri.home', 'KISW'));
-  const [view, setView] = useState(onAir ? 'live' : 'mine');
-  const [liveId, setLiveId] = useState(() => (onAir && onAir !== 'pick' ? onAir : store('ri.home', 'KISW')));
+  const [view, setView] = useState('mine');
   useEffect(() => save('ri.home', home), [home]);
-  useEffect(() => { if (onAir) clearOnAir(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const watchLive = (id) => { setLiveId(id); setView('live'); window.scrollTo({ top: 0 }); };
   const homeStation = STATIONS.find((s) => s.id === home) || STATIONS[0];
   const hours = useMemo(() => Math.max(1, (now - events[events.length - 1].ts) / 3600000), [events, now]);
 
@@ -3089,7 +3213,8 @@ function StationsView({ events, now, onAdvertiser, onOpen, onAir, clearOnAir }) 
 
   return (
     <>
-      {view !== 'live' && <div className="ri-home">
+      <p className="ri-purpose"><b>Stations</b> is for station sales teams: who advertises on your station, who's at risk, and who buys your competitors but not you.</p>
+      <div className="ri-home">
         <label htmlFor="ri-home">Your station</label>
         <select id="ri-home" value={home} onChange={(e) => setHome(e.target.value)}>
           <optgroup label="Seattle TV">
@@ -3101,15 +3226,13 @@ function StationsView({ events, now, onAdvertiser, onOpen, onAir, clearOnAir }) 
             </optgroup>
           ))}
         </select>
-      </div>}
+      </div>
 
       <div className="ri-seg" role="tablist" aria-label="Station view">
-        {[['mine', `My station (${homeStation.call})`], ['vs', 'Vs other stations'], ['live', 'On air now']].map(([id, label]) => (
+        {[['mine', `My station (${homeStation.call})`], ['vs', 'Vs other stations']].map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={view === id} className={view === id ? 'on' : ''} onClick={() => setView(id)}>{label}</button>
         ))}
       </div>
-
-      {view === 'live' && <StationLive events={events} now={now} stationId={liveId} setStationId={setLiveId} onOpen={onOpen} />}
 
       {view === 'mine' && (() => {
         const peers = STATIONS.filter((s) => s.market === homeStation.market && s.media === homeStation.media && !s.nc);
@@ -3173,6 +3296,7 @@ function StationsView({ events, now, onAdvertiser, onOpen, onAir, clearOnAir }) 
           </ul>
         </>
       )}
+      <StationProspects events={events} home={homeStation} />
       </>
       )}
 
@@ -3197,13 +3321,13 @@ function StationsView({ events, now, onAdvertiser, onOpen, onAir, clearOnAir }) 
         </table>
       </div>
 
-      <div className="ri-section-head"><h2>{homeStation.market} stream monitor</h2><span className="ri-count">{marketStations.length} streams · tap one to watch it live</span></div>
+      <div className="ri-section-head"><h2>{homeStation.market} stream monitor</h2><span className="ri-count">{marketStations.length} streams · tap one to watch it live in Live</span></div>
       <div className="ri-table-wrap">
         <table className="ri-table">
           <thead><tr><th>Station</th><th>Status</th><th className="num">Spots/hr</th><th className="num">Ad min/hr</th><th className="num">Est. $</th><th>Last spot</th></tr></thead>
           <tbody>
             {marketStations.map(({ s, p }) => (
-              <tr key={s.id} className={`ri-row-tap ${s.id === home ? 'home' : ''}`} onClick={() => watchLive(s.id)} title={`Watch ${s.call} live`}>
+              <tr key={s.id} className={`ri-row-tap ${s.id === home ? 'home' : ''}`} onClick={() => openStation(s.id)} title={`Watch ${s.call} live`}>
                 <td><b>{s.call}</b> <span className="muted">{s.network || s.band}{s.nc ? ' · non-comm.' : ''}</span></td>
                 <td><span className={`ri-status ${s.status}`} title={s.note || ''}>{s.status === 'live' ? 'Live' : 'Degraded'}</span></td>
                 <td className="num">{(p.spots / hours).toFixed(1)}</td>
@@ -3551,12 +3675,23 @@ function CheckView({ events, now, me, onOpen, notify }) {
   );
 }
 
-// ------------------------------------------------------------------ export
+// ------------------------------------------------------------------ sheets & alerts
+// The purpose first: your market, live, in a Google Sheet you own. Then what's in it, how you get it, and alerts.
 
-function ExportView({ rows, market, city = 'All', category, query, media, watchlist, toggleWatch, alertsOn, setAlertsOn, beatAlerts, setBeatAlerts, me, notify }) {
+const SHEET_TABS = [
+  ['Every ad', 'One row for every spot we hear: time, station, business, the offer, payment, due at signing, term, APR and est. cost.'],
+  ['Deal board', "Each competitor's current deal beside yours, ranked by true monthly cost. Red = theirs costs a shopper less."],
+  ['Competitors', 'Each business you track: spots this week vs last, share of voice, last heard and which stations.'],
+  ['Changes', 'Every price change, new ad, new advertiser, and anyone who went quiet, with the date.'],
+  ['My ads', 'Every spot of yours we heard, by station and hour, to check against what you bought.'],
+];
+
+function SheetsView({ rows, market, city = 'All', category, query, media, watchlist, toggleWatch, alertsOn, setAlertsOn, beatAlerts, setBeatAlerts, me, notify }) {
   const scope = [media === 'Both' ? 'Radio + TV' : media, market === 'All' ? 'All markets' : `${market} metro`, city !== 'All' && city, category === 'All' ? 'all categories' : category, query && `"${query}"`].filter(Boolean).join(', ');
   const feedUrl = `https://api.radiointel.network/v1/feed.csv?market=${market === 'All' ? 'all' : encodeURIComponent(market.toLowerCase())}${city !== 'All' ? `&city=${encodeURIComponent(city.toLowerCase())}` : ''}&key=YOUR_CLIENT_KEY`;
   const formula = `=IMPORTDATA("${feedUrl}")`;
+  const deal = dealOf(me);
+  const board = deal ? rankBoard(deal.market, deal.auto.monthly ? 'lease' : 'cash').slice(0, 6) : [];
 
   const copyRows = async () => {
     const ok = await copyText(toTSV(rows));
@@ -3569,17 +3704,63 @@ function ExportView({ rows, market, city = 'All', category, query, media, watchl
 
   return (
     <>
-      <div className="ri-section-head"><h2>Send to Google Sheets</h2></div>
+      <section className="ri-panel ri-sheets-hero">
+        <span className="ri-eyebrow">Sheets</span>
+        <h2>Your market, live, in your own Google Sheet</h2>
+        <p>Every competitor's ads, deals and airtime land in a Google Sheet you own, and it keeps itself up to date. Sort it, filter it, share it with your GM, or build your own charts. Nothing new to log in to.</p>
+      </section>
+
+      <div className="ri-section-head"><h2>What's in your sheet</h2><span className="ri-count">{SHEET_TABS.length} tabs</span></div>
+      <ol className="ri-sheet-tabs">
+        {SHEET_TABS.map(([t, d], i) => (
+          <li key={t}><span className="n">{i + 1}</span><span><b>{t}</b><span className="muted">{d}</span></span></li>
+        ))}
+      </ol>
+
+      {board.length > 0 && (
+        <>
+          <div className="ri-section-head"><h2>Preview: your Deal board tab</h2><span className="ri-count">{deal.market} · {deal.auto.monthly ? 'leases' : 'cash off'} on air</span></div>
+          <div className="ri-table-wrap ri-sheet-preview">
+            <table className="ri-table">
+              <thead><tr><th>#</th><th>Dealer</th><th>Vehicle</th>{deal.auto.monthly ? <><th className="num">Payment</th><th className="num">Due</th><th className="num">True / mo</th></> : <th className="num">Cash off</th>}<th>Vs you</th></tr></thead>
+              <tbody>
+                {board.map((x, i) => {
+                  const cmp = compareDeals(x.n, me);
+                  return (
+                    <tr key={x.n} className={x.n === me ? 'home' : ''}>
+                      <td className="num">{i + 1}</td>
+                      <td><b>{x.n}</b></td>
+                      <td>{x.a.vehicle}</td>
+                      {deal.auto.monthly
+                        ? <><td className="num">{money(x.a.monthly)}</td><td className="num">{money(x.a.due)}</td><td className="num">{money(trueMonthly(x.a))}</td></>
+                        : <td className="num">{money(x.a.cashOff)}</td>}
+                      <td>{x.n === me ? <span className="ri-you-tag">You</span> : <VsBadge cmp={cmp} />}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      <div className="ri-section-head"><h2>How you get it</h2><span className="tag amber">Turns on with live recording</span></div>
+      <ol className="ri-pipeline">
+        <li><b>We set up your sheet</b><span>We create it and share it with your email. You own it.</span></li>
+        <li><b>It fills on its own</b><span>New ads show up within minutes of airing. Deals and changes update as they happen.</span></li>
+        <li><b>Open it anywhere</b><span>Computer or phone. Share it like any Google Sheet.</span></li>
+      </ol>
+
+      <div className="ri-section-head"><h2>Take the current data now</h2></div>
       <div className="ri-panel">
-        <p>Exports the spots that match your current filters: <b>{scope}</b>. That is <b>{rows.length.toLocaleString('en-US')} rows</b> with {EXPORT_COLUMNS.length} columns each, including lease payment, money due, term and APR as numbers.</p>
+        <p>Copies the ads that match your current filters: <b>{scope}</b>. That's <b>{rows.length.toLocaleString('en-US')} rows</b> with {EXPORT_COLUMNS.length} columns, with payments, money due, term and APR as numbers.</p>
         <div className="ri-sheet-actions">
           <button type="button" className="ri-btn primary" onClick={copyRows}>Copy rows for Sheets</button>
           {!IS_PREVIEW && <button type="button" className="ri-btn" onClick={() => downloadCSV(rows)}>Download CSV</button>}
         </div>
-        {IS_PREVIEW && <p className="muted small">CSV download works in the installed app. In this preview, copy the rows and paste them into Sheets.</p>}
       </div>
 
-      <div className="ri-section-head"><h2>Alerts</h2><span className="ri-count">{watchlist.length} watched</span></div>
+      <div className="ri-section-head"><h2>Alerts</h2><span className="ri-count">{watchlist.length} competitors tracked</span></div>
       <div className="ri-panel">
         <label className="ri-switch">
           <input id="ri-beat-alerts" type="checkbox" checked={beatAlerts} onChange={(e) => setBeatAlerts(e.target.checked)} />
@@ -3587,38 +3768,39 @@ function ExportView({ rows, market, city = 'All', category, query, media, watchl
         </label>
         <label className="ri-switch">
           <input id="ri-alerts" type="checkbox" checked={alertsOn} onChange={(e) => setAlertsOn(e.target.checked)} />
-          <span>Show an alert when a watched advertiser airs (at most one every 45 seconds)</span>
+          <span><b>Competitor alert:</b> tell me when a competitor I track airs (at most one every 45 seconds)</span>
         </label>
         <div className="ri-chips">
-          {watchlist.length === 0 && <span className="muted">Nobody watched yet. Star advertisers on the Trends tab.</span>}
+          {watchlist.length === 0 && <span className="muted">Nobody tracked yet. Add competitors on Today.</span>}
           {watchlist.map((w) => (
-            <button key={w} type="button" className="ri-chip" onClick={() => toggleWatch(w)} aria-label={`Remove ${w}`}>{w} <span aria-hidden="true">×</span></button>
+            <button key={w} type="button" className="ri-chip" onClick={() => toggleWatch(w)} aria-label={`Stop tracking ${w}`}>{w} <span aria-hidden="true">×</span></button>
           ))}
         </div>
-        <p className="muted small">In this demo, alerts pop up inside the app. Text and phone push alerts, plus new-advertiser and gone-dark alerts, switch on with live data. <span className="tag amber">Needs API</span></p>
+        <p className="muted small">Alerts pop up inside the app for now. Text and email alerts turn on with live recording.</p>
       </div>
 
-      <div className="ri-section-head"><h2>Live feed for client sheets</h2><span className="tag amber">Needs API</span></div>
-      <div className="ri-panel">
-        <p>Each client gets a private feed URL. This formula in a Google Sheet pulls new detections on its own.</p>
+      <details className="ri-details">
+        <summary>For your IT person: the feed formula</summary>
+        <p>Each client gets a private feed address. This formula in a Google Sheet pulls new ads on its own (Google refreshes it about once an hour; the full service writes rows within minutes).</p>
         <code className="ri-code">{formula}</code>
         <button type="button" className="ri-btn" onClick={copyFormula}>Copy formula</button>
-        <p className="muted small">Google refreshes IMPORTDATA about once an hour. For minute-by-minute rows, the backend writes into the client's sheet through the Sheets API.</p>
-      </div>
-
-      <div className="ri-section-head"><h2>Columns in every export</h2></div>
-      <div className="ri-chips">
-        {EXPORT_COLUMNS.map(([name]) => <span key={name} className="ri-chip static">{name}</span>)}
-      </div>
-
-      <div className="ri-section-head"><h2>How a spot becomes a row</h2></div>
-      <ol className="ri-pipeline">
-        <li><b>Capture</b><span>Record every commercial station around the clock, by stream and over the air.</span></li>
-        <li><b>Detect</b><span>Find ad breaks and fingerprint each spot so repeats match instantly.</span></li>
-        <li><b>Transcribe</b><span>Speech-to-text on each new creative, including the fast-read fine print.</span></li>
-        <li><b>Extract the offer</b><span>AI fills in price, vehicle, payment, money down, term, APR, promo code, expiry, phone and URL.</span></li>
-        <li><b>Deliver</b><span>The spot lands in the live feed, the alerts and the client's Google Sheet.</span></li>
-      </ol>
+      </details>
+      <details className="ri-details">
+        <summary>Every column in the Every ad tab ({EXPORT_COLUMNS.length})</summary>
+        <div className="ri-chips">
+          {EXPORT_COLUMNS.map(([name]) => <span key={name} className="ri-chip static">{name}</span>)}
+        </div>
+      </details>
+      <details className="ri-details">
+        <summary>How an ad becomes a row</summary>
+        <ol className="ri-pipeline">
+          <li><b>Capture</b><span>Record every commercial station around the clock.</span></li>
+          <li><b>Detect</b><span>Find ad breaks and fingerprint each spot so repeats match instantly.</span></li>
+          <li><b>Transcribe</b><span>Turn each new ad into text, including the fast-read fine print.</span></li>
+          <li><b>Pull out the offer</b><span>Price, vehicle, payment, money down, term, APR, promo code, end date, phone and website.</span></li>
+          <li><b>Deliver</b><span>The ad lands in the live feed, your alerts and your sheet.</span></li>
+        </ol>
+      </details>
     </>
   );
 }
