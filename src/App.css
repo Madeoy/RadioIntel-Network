@@ -1016,3 +1016,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-check-table td, .ri-check-table th { padding-left: 8px; padding-right: 8px; }
 .ri-check-table .ri-x { margin-left: 2px; }
 .ri-table.ri-check-table { min-width: 0; }
+.ri-check-add { grid-template-columns: minmax(0, 1fr) 104px auto; }
+.ri-check-add input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.ri-check-add input[type="number"]::-webkit-inner-spin-button,
+.ri-check-add input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }

@@ -3488,7 +3488,7 @@ function CheckView({ events, now, me, onOpen, notify }) {
               <option value="">Add a station you bought…</option>
               {stationChoices.map((s) => <option key={s.id} value={s.id}>{s.call} {s.network || s.band}{s.market !== market ? ` · ${s.market}` : ''}</option>)}
             </select>
-            <input type="number" min="1" inputMode="numeric" value={addN} onChange={(e) => setAddN(e.target.value)} placeholder="Spots/wk" aria-label="Spots per week" />
+            <input type="number" min="1" inputMode="numeric" value={addN} onChange={(e) => setAddN(e.target.value)} placeholder="Per week" aria-label="Spots per week" />
             <button type="button" className="ri-btn" onClick={addOrder} disabled={!addSt || !(parseInt(addN, 10) > 0)}>Add</button>
           </div>
           {rows.length > 0 && (
