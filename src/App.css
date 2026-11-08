@@ -1150,3 +1150,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .ri-btn.primary:hover { background: var(--accent-fill-hover); border-color: var(--accent-fill-hover); }
 .ri-btn.primary:active { background: var(--accent-fill); color: #e8fff5; filter: brightness(0.92); }
 .ri-checks input, .ri-switch input, .ri-adv input[type="range"] { accent-color: var(--accent-fill); }
+
+/* Secondary buttons: a slightly lighter fill and outline so they read as buttons on a dark screen. */
+.ri-btn:not(.primary) { background: #24242c; border-color: rgba(255, 255, 255, 0.26); }
+.ri-btn:not(.primary):hover { background: #2c2c35; border-color: rgba(255, 255, 255, 0.34); }
