@@ -42,7 +42,7 @@ function dealOf(name) {
 }
 
 // Them vs you on the current deal. Same market and same kind of deal only, otherwise null.
-// status: 'them' = their deal beats yours, 'you' = yours is better, 'even' = within a few dollars.
+// status: 'them' = their deal is lower than yours, 'you' = yours is better, 'even' = within a few dollars.
 function compareDeals(themName, meName) {
   if (!meName || themName === meName) return null;
   const t = dealOf(themName); const y = dealOf(meName);
@@ -55,7 +55,7 @@ function compareDeals(themName, meName) {
     const side = (a, tr) => ({ veh: a.vehicle, big: `${money(a.monthly)}/mo`, sub: `${money(a.due)} due · ${a.term} mo`, tru: `${money(tr)}/mo true cost` });
     return {
       status, gap: Math.abs(gap), sameBody: ta.body === ya.body, them: side(ta, tTrue), you: side(ya, yTrue),
-      short: status === 'them' ? `Beats you by ${money(gap)}/mo` : status === 'you' ? `You’re ${money(-gap)}/mo cheaper` : 'About even with you',
+      short: status === 'them' ? `${money(gap)}/mo lower than yours` : status === 'you' ? `Yours is ${money(-gap)}/mo lower` : 'About even with you',
     };
   }
   if (ta.cashOff && ya.cashOff) {
@@ -64,7 +64,7 @@ function compareDeals(themName, meName) {
     const side = (a) => ({ veh: a.vehicle, big: `${money(a.cashOff)} off`, sub: a.apr != null ? `or ${a.apr}% APR` : a.deal, tru: '' });
     return {
       status, gap: Math.abs(gap), sameBody: ta.body === ya.body, them: side(ta), you: side(ya),
-      short: status === 'them' ? `Beats you by ${money(gap)} off` : status === 'you' ? `You give ${money(-gap)} more off` : 'About even with you',
+      short: status === 'them' ? `${money(gap)} more off than yours` : status === 'you' ? `Yours gives ${money(-gap)} more off` : 'About even with you',
     };
   }
   return null;
@@ -267,7 +267,7 @@ export default function App() {
         const hit = alertsRef.current && batch.find((d) => watchRef.current.includes(d.creative.advertiser));
         if (beat) {
           lastAlert.current = ts;
-          setToast({ kind: 'threat', text: `${beat.d.creative.advertiser} just aired a deal that beats yours`, sub: `${beat.cmp.short} · ${beat.d.station.call}`, detection: beat.d });
+          setToast({ kind: 'threat', text: `${beat.d.creative.advertiser} just aired a lower deal than yours`, sub: `${beat.cmp.short} · ${beat.d.station.call}`, detection: beat.d });
         } else if (hit) {
           lastAlert.current = ts;
           setToast({ kind: 'alert', text: `${hit.creative.advertiser} just aired on ${hit.station.call}`, sub: hit.creative.offer.headline, detection: hit });
@@ -770,20 +770,20 @@ function Kpis({ events: all, market, media, category, now }) {
 }
 
 // "Your competitors right now": one card per watched advertiser, newest offer first.
-// Top-of-panel verdict: does any deal on air in your market beat yours right now?
+// Top-of-panel summary: how deals on air in your market compare with yours right now.
 function BeatBanner({ me, watchlist, toggleWatch }) {
   const mine = dealOf(me);
-  if (!me) return <p className="ri-note">Just browsing. Pick a business in “Insights on” to see which deals beat theirs.</p>;
+  if (!me) return <p className="ri-note">Just browsing. Pick a business in “Insights on” to see how deals on air compare with theirs.</p>;
   if (!mine) {
     return <p className="ri-note">Deal-vs-deal checks cover car dealers for now. Airtime, share of voice and momentum work for every category.</p>;
   }
   const beats = dealsBeatingMe(me);
   if (beats.length === 0) {
-    return <div className="ri-beat ok"><b>✓ No car deal on air in {mine.market} beats yours right now.</b></div>;
+    return <div className="ri-beat ok"><b>✓ Your deal is the lowest car deal on air in {mine.market} right now.</b></div>;
   }
   return (
     <div className="ri-beat threat">
-      <b>⚠ {beats.length} deal{beats.length > 1 ? 's' : ''} on air beat{beats.length > 1 ? '' : 's'} yours</b>
+      <b>{beats.length} deal{beats.length > 1 ? 's' : ''} on air {beats.length > 1 ? 'are' : 'is'} lower than yours</b>
       <ul>
         {beats.map(({ name, cmp }) => (
           <li key={name}>
@@ -901,7 +901,7 @@ function DealsView({ events, onAdvertiser, me, chooseMe, filterProps }) {
   const [part, setPart] = useSection('ri.part.deals', 'air');
   return (
     <>
-      <p className="ri-purpose"><b>Deals</b> shows exactly what your competitors are offering shoppers, so you can match or beat it.</p>
+      <p className="ri-purpose"><b>Deals</b> shows exactly what your competitors are offering shoppers, so you can see how yours compares.</p>
       <Sections id="Deals" value={part} onChange={setPart} items={[['air', 'In their ads'], ['web', 'On their websites']]} />
       {part === 'air' && <OffersView events={events} onAdvertiser={onAdvertiser} me={me} {...filterProps} />}
       {part === 'web' && <WebDealsView me={me} chooseMe={chooseMe} />}
@@ -1035,7 +1035,7 @@ function Scoreboard({ events, me, now, goTo }) {
       {deal ? (
         <Tile label="Your deal" tone={beats.length ? 'them' : 'you'}
           value={pos ? `#${pos} of ${board.length}` : '–'}
-          sub={beats.length ? `${beats.length} deal${beats.length > 1 ? 's' : ''} on air beat yours` : 'No deal on air beats yours'}
+          sub={beats.length ? `${beats.length} lower deal${beats.length > 1 ? 's' : ''} on air` : 'Yours is the lowest on air'}
           def={`Your ${kind === 'lease' ? 'lease' : 'cash-off'} deal ranked against every ${deal.market} dealer ${kind === 'lease' ? 'lease on air, by true monthly cost' : 'cash-off deal on air'}.`}
           onClick={() => goTo('deals')} />
       ) : (
@@ -1454,15 +1454,15 @@ function WhereItLands({ d, me, events }) {
     : `Different class (${c.auto.body} vs ${ya.body}), so shoppers may not cross-shop. Judge the fit.`;
   let verdict; let move;
   if (cmp.status === 'them') {
-    verdict = <p className="ri-land-verdict them">⚠ Beats {me} by {lease ? `${money(cmp.gap)}/mo` : `${money(cmp.gap)} off`}</p>;
+    verdict = <p className="ri-land-verdict them">{lease ? `${money(cmp.gap)}/mo lower` : `${money(cmp.gap)} more off`} than {me}</p>;
     move = lease
       ? <>To match on true monthly cost, {me} would need about <b>{money(cmp.gap)}/mo</b> off the payment, or about <b>{money(dueCut)}</b> less due at signing.</>
       : <>To match, {me} would need about <b>{money(cmp.gap)}</b> more off.</>;
   } else if (cmp.status === 'you') {
-    verdict = <p className="ri-land-verdict you">✓ {me}'s deal is better by {lease ? `${money(cmp.gap)}/mo` : `${money(cmp.gap)} off`}</p>;
+    verdict = <p className="ri-land-verdict you">✓ {me}'s deal is lower by {lease ? `${money(cmp.gap)}/mo` : `${money(cmp.gap)} off`}</p>;
     move = myAirs < airs.length
-      ? <>{me} wins on price but they're out-airing you <b>{airs.length} to {myAirs}</b>. The better deal only wins if shoppers hear it.</>
-      : <>{me} wins on price and on airtime. Keep the offer on air through the weekend.</>;
+      ? <>{me} has the lower price. They've aired <b>{airs.length}</b> times and {me} <b>{myAirs}</b>. A good deal works best when shoppers hear it.</>
+      : <>{me} has the lower price and more airtime. Keeping the offer on air through the weekend keeps it in front of shoppers.</>;
   } else {
     verdict = <p className="ri-land-verdict even">≈ About even with {me}</p>;
     move = <>Price is a wash, so airtime decides: they aired <b>{airs.length}</b>, {me} aired <b>{myAirs}</b>.</>;
@@ -1470,7 +1470,7 @@ function WhereItLands({ d, me, events }) {
   const say = cmp.status === 'them'
     ? `"Right now ${c.advertiser} is on ${d.station.call} with a ${cmp.them.veh} at ${cmp.them.big}${lease ? ` (${cmp.them.tru})` : ''}. That's ${lease ? `${money(cmp.gap)} a month` : money(cmp.gap)} better than yours, and payment shoppers hear it before they hear you."`
     : cmp.status === 'you'
-      ? `"Your ${cmp.you.veh} deal beats ${c.advertiser}'s. They've run ${airs.length} spots in the ${PERIOD}${myAirs < airs.length ? ` to your ${myAirs}` : ''}. The better deal should be the louder one."`
+      ? `"Your ${cmp.you.veh} deal is lower than ${c.advertiser}'s. They've run ${airs.length} spots in the ${PERIOD}${myAirs < airs.length ? ` and you've run ${myAirs}` : ''}. More airtime could get your deal heard by more people."`
       : `"You and ${c.advertiser} are priced the same. Whoever's on air more gets the call."`;
 
   return shell(
@@ -1743,7 +1743,7 @@ function AutoBoard({ offers, market, onAdvertiser, me }) {
         </select>
       </div>
       <p className="ri-note">Every dealer with a lease ad on air, ranked. {me
-        ? <><span className="ri-vs-badge them">⚠ red</span> = their deal beats <b>{me}</b>’s, <span className="ri-vs-badge you">✓ green</span> = {me}’s is better. Change “Insights on” at the top to look at another business.</>
+        ? <><span className="ri-vs-badge them">red</span> = their deal is lower than <b>{me}</b>’s, <span className="ri-vs-badge you">green</span> = {me}’s is lower. Change “Insights on” at the top to look at another business.</>
         : <>Pick a business in “Insights on” at the top to color each deal against theirs.</>}</p>
       <p className="muted small">True monthly cost adds the money due at signing, spread over the term. It is the fair way to compare a "$0 down" deal with a "$299/mo" deal.</p>
       {leases.length === 0 && <p className="ri-empty">No lease deals match. Try another market or body style.</p>}
@@ -2117,7 +2117,7 @@ function vsMine(o, mine, type) {
   if (type === 'lease') {
     const gap = Math.round(wTrue(mine) - wTrue(o));
     if (Math.abs(gap) < 5) return { status: 'even', short: 'About even with you' };
-    return gap > 0 ? { status: 'them', short: `Beats you by ${money(gap)}/mo` } : { status: 'you', short: `You're ${money(-gap)}/mo cheaper` };
+    return gap > 0 ? { status: 'them', short: `${money(gap)}/mo lower than yours` } : { status: 'you', short: `Yours is ${money(-gap)}/mo lower` };
   }
   const gap = wOff(o) - wOff(mine);
   if (Math.abs(gap) < 250) return { status: 'even', short: 'About even with you' };
@@ -2147,7 +2147,7 @@ function WebDealsView({ me: meName, chooseMe }) {
   if (me) {
     const myLeases = mine.filter((o) => o.type === 'lease').length;
     const leaseRivals = new Set(rivals.filter((o) => o.type === 'lease').map((o) => o.dealer));
-    if (mine.length && !myLeases && leaseRivals.size) notes.push({ kind: 'miss', text: <><b>{leaseRivals.size} competitors</b> post monthly lease payments. You post none, so payment shoppers compare them, not you.</> });
+    if (mine.length && !myLeases && leaseRivals.size) notes.push({ kind: 'miss', text: <><b>{leaseRivals.size} competitors</b> post monthly lease payments. You don't post one yet, and payment shoppers often compare by monthly price.</> });
     const theirOnly = [...new Set(rivals.map((o) => o.model))].filter((m) => !mine.some((o) => o.model === m));
     if (mine.length && theirOnly.length) notes.push({ kind: 'open', text: <>Competitors post specials on <b>{theirOnly.length} models you don't</b>: {theirOnly.slice(0, 6).join(', ')}{theirOnly.length > 6 ? '…' : ''}.</> });
   }
@@ -2525,7 +2525,7 @@ function MixView({ crossMedia, market, category, me, setMe, onAdvertiser }) {
 
           {beats.length > 0 && (
             <>
-              <div className="ri-section-head"><h2>Deals that beat yours</h2><span className="ri-count">on air now · true monthly cost</span></div>
+              <div className="ri-section-head"><h2>Deals lower than yours</h2><span className="ri-count">on air now · true monthly cost</span></div>
               <ul className="ri-leads ri-beats">
                 {beats.map((b) => (
                   <li key={b.name}>
@@ -2721,7 +2721,7 @@ function HeatHelp({ market, category, media, grid, onPick }) {
         <p><b>What it's for: picking the best time to buy {tvParts ? 'TV' : 'radio'}.</b> Every square is one hour of the week, colored by how many ads ran. Bright squares are where the ads pile up; dark squares are quiet.</p>
         <ul className="ri-heat-uses">
           <li><b>Find the best time to buy</b><span>A big audience but fewer competing ads, so yours stands out. Look for "Better value" in an hour's details.</span></li>
-          <li><b>See when your rivals are loud</b><span>Pick your category in the filters. Car dealers, for example, pile on Thursday to Saturday before the weekend.</span></li>
+          <li><b>See when your category is busiest</b><span>Pick your category in the filters. Car dealers, for example, pile on Thursday to Saturday before the weekend.</span></li>
           <li><b>Know the price before you call</b><span>Each hour shows what a :30 spot about costs, so you can tell a fair rate from a high one when a station quotes you.</span></li>
           <li><b>Check the schedule you're sold</b><span>If your spots land in the brightest squares, you're paying for the most crowded breaks. Ask the station for the quieter days at the same hour.</span></li>
         </ul>
@@ -2747,7 +2747,7 @@ function HeatHelp({ market, category, media, grid, onPick }) {
           <div><dt>Ads per station per hour</dt><dd>How crowded a station's breaks are. More ads means yours has more to compete with. Light is under 6, normal 6–10, crowded 10 or more.</dd></div>
           <div><dt>Cost per :30</dt><dd>The estimated price of one 30-second spot at that daypart, on an average station and on the most expensive one.</dd></div>
           <div><dt>Better value</dt><dd>The same hour on a similar day (weekday with weekday, weekend with weekend) with fewer ads. The audience and rate are about the same, but your ad stands out more.</dd></div>
-          <div><dt>Leans in / quiet</dt><dd>Whether your category runs heavier or lighter at that hour than the market overall. Leaning in means your rivals are loudest then.</dd></div>
+          <div><dt>Leans in / quiet</dt><dd>Whether your category runs heavier or lighter at that hour than the market overall. Leaning in means more businesses like yours are on the air then.</dd></div>
           <div><dt>Heard today</dt><dd>Advertisers we actually picked up in that daypart today, from the live feed.</dd></div>
         </dl>
         <p className="muted small">Weekly volume and rates are demo estimates until real recordings fill in.</p>
@@ -2841,8 +2841,8 @@ function HourDetail({ cell, isPeak, grid, market, category, media, me, events, o
   }
   if (push != null) {
     const who = cat.toLowerCase();
-    if (push >= 1.15) rows.push({ ic: '▲', b: `${cat} leans in here`, t: `${cat} advertisers run ${Math.round((push - 1) * 100)}% heavier at this hour than the market overall. Your rivals are loudest here.` });
-    else if (push <= 0.87) rows.push({ ic: '▼', b: `${cat} is quiet here`, t: `${cat} advertisers run ${Math.round((1 - push) * 100)}% lighter at this hour than the market overall. Less noise from your rivals.` });
+    if (push >= 1.15) rows.push({ ic: '▲', b: `${cat} leans in here`, t: `${cat} advertisers run ${Math.round((push - 1) * 100)}% heavier at this hour than the market overall. More businesses like yours are on the air now.` });
+    else if (push <= 0.87) rows.push({ ic: '▼', b: `${cat} is quiet here`, t: `${cat} advertisers run ${Math.round((1 - push) * 100)}% lighter at this hour than the market overall. Fewer businesses like yours are on the air now.` });
     else rows.push({ ic: '≈', b: `${cat} runs at its normal pace here`, t: `No special push from ${who} advertisers at this hour.` });
   }
   if (top.length) {
@@ -2961,7 +2961,7 @@ function TrendsView({ part = 'spend', events, crossMedia, allEvents, watchlist, 
       {part === 'prices' && (<>
       <div className="ri-section-head"><h2>Price moves</h2><span className="ri-count">8 weeks, {WEEKS[0]} to {WEEKS[WEEKS.length - 1]}</span></div>
       <p className="muted small ri-key">
-        Lines show direction only.{me && <> <span className="ri-vs-badge them">⚠ red</span> = their deal beats {me}’s, <span className="ri-vs-badge you">✓ green</span> = {me}’s is better. No color = not comparable.</>}
+        Lines show direction only.{me && <> <span className="ri-vs-badge them">red</span> = their deal is lower than {me}’s, <span className="ri-vs-badge you">green</span> = {me}’s is lower. No color = not comparable.</>}
       </p>
       {prices.length === 0 && <p className="ri-empty">No tracked price history in this market yet.</p>}
       <ul className="ri-prices">
@@ -3095,7 +3095,7 @@ function HeadToHead({ events, home, hours, onAdvertiser }) {
 
   return (
     <>
-      <div className="ri-section-head"><h2>Head to head</h2><span className="ri-count">last {hours.toFixed(1)} hrs</span></div>
+      <div className="ri-section-head"><h2>Side by side</h2><span className="ri-count">last {hours.toFixed(1)} hrs</span></div>
       <div className="ri-panel ri-h2h">
         <div className="ri-h2h-pick">
           <span className="me">{home.call}</span>
@@ -3105,7 +3105,7 @@ function HeadToHead({ events, home, hours, onAdvertiser }) {
           </select>
         </div>
         <p className="ri-callout">
-          {home.call} ranks <b>#{rank} of {peers.length}</b> {home.market} {home.media === 'TV' ? 'TV' : 'radio'} stations by est. ad revenue, and leads {rival.call} on <b>{wins} of {metrics.length}</b>.
+          How {home.call} and {rival.call} compare over the same hours. Every station's numbers come from the same recordings.
         </p>
         <div className="ri-media-legend" aria-hidden="true"><span><i className="sw me" />{home.call}</span><span><i className="sw them" />{rival.call}</span></div>
         <ul className="ri-h2h-rows">
@@ -3127,7 +3127,7 @@ function HeadToHead({ events, home, hours, onAdvertiser }) {
         <dl className="ri-facts">
           <div><dt>On both</dt><dd>{both.length} advertisers</dd></div>
           <div><dt>Only on {home.call}</dt><dd>{onlyMe.length}</dd></div>
-          <div className="wide"><dt>Only on {rival.call}: pitch them</dt><dd>{onlyThem.length ? onlyThem.slice(0, 6).map((a, i) => (
+          <div className="wide"><dt>Advertising on radio, not yet on {home.call}</dt><dd>{onlyThem.length ? onlyThem.slice(0, 6).map((a, i) => (
             <React.Fragment key={a}>{i ? ', ' : ''}<b>{a}</b></React.Fragment>
           )) : 'None'}</dd></div>
         </dl>
@@ -3136,7 +3136,7 @@ function HeadToHead({ events, home, hours, onAdvertiser }) {
   );
 }
 
-// "My station": every advertiser on your station, and the accounts you may be losing.
+// "My station": every advertiser on your station, and accounts airing less this week (a good time to check in).
 function MyStation({ events, home, hours, now, peers, rank, onAdvertiser, onOpen }) {
   const [all, setAll] = useState(false);
   const onHome = useMemo(() => events.filter((d) => d.station.id === home.id), [events, home]);
@@ -3163,21 +3163,21 @@ function MyStation({ events, home, hours, now, peers, rank, onAdvertiser, onOpen
   return (
     <>
       <p className="ri-lead-total">
-        <b>{home.call}</b> aired <b>{onHome.length}</b> spots from <b>{advs.length}</b> advertisers in the last {hours.toFixed(1)} hrs, about <b>{money(spend)}</b> in est. ad revenue. That ranks <b>#{rank} of {peers}</b> {home.market} {home.media === 'TV' ? 'TV' : 'radio'} stations.
+        <b>{home.call}</b> aired <b>{onHome.length}</b> spots from <b>{advs.length}</b> advertisers in the last {hours.toFixed(1)} hrs, about <b>{money(spend)}</b> in est. ad revenue. 
       </p>
 
-      <div className="ri-section-head"><h2>At-risk accounts</h2><span className="ri-count">cutting you, buying elsewhere</span></div>
+      <div className="ri-section-head"><h2>Accounts to check in with</h2><span className="ri-count">airing less with you this week</span></div>
       {atRisk.length === 0 ? (
-        <div className="ri-beat ok"><b>✓ No advertiser is cutting {home.call} while growing elsewhere.</b></div>
+        <div className="ri-beat ok"><b>✓ Every advertiser on {home.call} is steady or growing this week.</b></div>
       ) : (
         <div className="ri-beat threat">
-          <b>⚠ {atRisk.length} advertiser{atRisk.length > 1 ? 's are' : ' is'} moving money away from you</b>
+          <b>{atRisk.length} advertiser{atRisk.length > 1 ? 's are' : ' is'} airing less with you this week</b>
           <ul>
             {atRisk.map((r) => (
               <li key={r.name}>
                 <b className="nm">{r.name}</b>
                 <span className="muted">Spots on {home.call} {pct(r.onYou)} vs last week, while their total airtime is {pct(r.overall)}.</span>
-                <span className="gap">Call them before it shrinks further.</span>
+                <span className="gap">A good time for a friendly check-in.</span>
               </li>
             ))}
           </ul>
@@ -3196,7 +3196,7 @@ function MyStation({ events, home, hours, now, peers, rank, onAdvertiser, onOpen
             <div className="sub">
               <span>{r.cat}</span><span>{r.spins} spots</span>
               <span>on you this wk: {pct(r.onYou)}</span>
-              {r.atRisk && <span className="ri-vs-badge them">At risk</span>}
+              {r.atRisk && <span className="ri-vs-badge them">Check in</span>}
             </div>
           </li>
         ))}
@@ -3278,7 +3278,7 @@ function StationsView({ events, now, onAdvertiser, onOpen, openStation }) {
 
   return (
     <>
-      <p className="ri-purpose"><b>Stations</b> is for station sales teams: who advertises on your station, who's at risk, and who buys your competitors but not you.</p>
+      <p className="ri-purpose"><b>Stations</b> is for station sales teams: who advertises on your station, who to check in with, and businesses on radio that aren't with you yet.</p>
       <div className="ri-home">
         <label htmlFor="ri-home">Your station</label>
         <select id="ri-home" value={home} onChange={(e) => setHome(e.target.value)}>
@@ -4126,7 +4126,7 @@ function SheetsView({ rows, market, city = 'All', category, query, media, watchl
       <div className="ri-panel">
         <label className="ri-switch">
           <input id="ri-beat-alerts" type="checkbox" checked={beatAlerts} onChange={(e) => setBeatAlerts(e.target.checked)} />
-          <span><b>Beat alert:</b> tell me when a competitor airs a deal that beats {me ? `${me}’s` : 'yours (pick your business in “Insights on”)'} (true monthly cost, same market)</span>
+          <span><b>Price alert:</b> tell me when a deal lower than {me ? `${me}’s` : 'yours (pick your business in “Insights on”)'} airs (true monthly cost, same market)</span>
         </label>
         <label className="ri-switch">
           <input id="ri-alerts" type="checkbox" checked={alertsOn} onChange={(e) => setAlertsOn(e.target.checked)} />
