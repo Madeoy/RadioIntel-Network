@@ -1179,6 +1179,114 @@ function MiniFeed({ events, names, now, onOpen, title, limit = 12, empty }) {
   );
 }
 
+// Car dealers: "What can I adjust today?" Three cards, one plain suggestion each.
+// Built only from ads on air (we never see a dealer's books), and worded neutrally: facts, not "beating you".
+const fmtDay = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+function AdjustToday({ me, events, now, goTo }) {
+  const [open, setOpen] = useState(false);
+  const mine = dealOf(me);
+  if (!mine || !mine.auto) return null;
+  const mkt = mine.market;
+  const a = mine.auto; const lease = !!a.monthly;
+
+  // 1. Your deal vs the market
+  const names = [...new Set(CREATIVES.filter((c) => c.auto && c.market === mkt && c.advertiser !== me).map((c) => c.advertiser))];
+  const cmps = names.map((n) => ({ name: n, cmp: compareDeals(n, me) })).filter((x) => x.cmp);
+  const lower = cmps.filter((x) => x.cmp.status === 'them').sort((x, y) => y.cmp.gap - x.cmp.gap);
+  const higher = cmps.filter((x) => x.cmp.status === 'you');
+  const even = cmps.filter((x) => x.cmp.status === 'even');
+  const myLine = lease ? `${a.vehicle} lease is ${money(a.monthly)}/mo` : `${a.vehicle} deal is ${money(a.cashOff)} off`;
+  // Only suggest a price move against the same kind of vehicle (sedan vs sedan, SUV vs SUV).
+  const lowerSame = lower.filter((x) => x.cmp.sameBody);
+  const kind = (a.body || 'vehicle').toLowerCase();
+  const move1 = !cmps.length ? 'No similar deals on air in your market right now, so yours stands alone. Keep it on the air.'
+    : lowerSame.length
+      ? `${lease ? `About ${money(lowerSame[0].cmp.gap + 5)}/mo less in true monthly cost` : `About ${money(lowerSame[0].cmp.gap + 250)} more off`} would make yours the best ${kind} deal on air. Or keep your price and give shoppers another reason to call, like a weekend bonus.`
+      : lower.length
+        ? `The lower deal${lower.length > 1 ? 's are' : ' is'} on a different kind of vehicle, so yours is the best ${kind} deal on air. Keep it on the air so shoppers hear it.`
+        : 'Yours is already the best deal on air. The move is to keep it on the air so shoppers hear it.';
+
+  // 2. Where and when to be heard: stations with the fewest car ads
+  const scoped = events.filter((d) => d.station.market === mkt);
+  const isCar = (d) => d.creative.category === 'Auto Dealer';
+  const byStation = {};
+  for (const d of scoped) {
+    const s = byStation[d.station.call] || (byStation[d.station.call] = { call: d.station.call, all: 0, car: 0, dp: {} });
+    s.all += 1; if (isCar(d)) s.car += 1;
+    const p = s.dp[d.daypart] || (s.dp[d.daypart] = { all: 0, car: 0 }); p.all += 1; if (isCar(d)) p.car += 1;
+  }
+  const lanes = Object.values(byStation).filter((s) => s.all >= 5).sort((x, y) => x.car / x.all - y.car / y.all || y.all - x.all);
+  const best = lanes[0];
+  const bestDp = best && Object.entries(best.dp).filter(([, v]) => v.all >= 2).sort((x, y) => x[1].car / x[1].all - y[1].car / y[1].all)[0];
+
+  // 3. What's changing: only real changes from car dealers in your market
+  const autoNames = new Set(names);
+  const soon = now + 7 * 864e5;
+  const changes = [
+    ...OFFER_CHANGES.filter((c) => c.market === mkt && autoNames.has(c.advertiser))
+      .map((c) => ({ ic: '⇄', text: <><b>{c.advertiser}</b> changed {c.product}: {c.from} → {c.to} ({c.date})</>, move: `${c.advertiser} changed their ${c.product} deal. Worth checking how yours compares on a similar model.` })),
+    ...CREATIVES.filter((c) => c.auto && c.market === mkt && c.advertiser !== me && c.offer?.exp && Date.parse(c.offer.exp) >= now && Date.parse(c.offer.exp) <= soon)
+      .map((c) => ({ ic: '⏱', text: <><b>{c.advertiser}</b>'s {c.auto.vehicle} deal ends {fmtDay(c.offer.exp)}</>, move: `${c.advertiser}'s deal ends ${fmtDay(c.offer.exp)}. Shoppers looking after that will be comparing fresh offers.` })),
+    ...MARKET_MOVES.filter((m) => m.market === mkt && m.category === 'Auto Dealer' && m.advertiser !== me)
+      .map((m) => m.kind === 'new'
+        ? { ic: '★', text: <><b>{m.advertiser}</b> just started advertising ({m.date}). {m.note}</>, move: `${m.advertiser} is new on the air. Shoppers are hearing a new name, so it's a good week to keep yours steady.` }
+        : { ic: '◌', text: <><b>{m.advertiser}</b> went quiet ({m.date}). {m.note}</>, move: `${m.advertiser} went quiet, so fewer car deals are on the air. That's more room for yours to be heard.` }),
+  ].slice(0, 3);
+
+  return (
+    <section className="ri-adjust" aria-label="What can I adjust today">
+      <div className="ri-adjust-head">
+        <h2>What can I adjust today?</h2>
+        <span className="muted small">{me} · {mkt} · from the ads on air</span>
+      </div>
+      <div className="ri-adjust-cards">
+        <article className="ri-adjust-card">
+          <span className="ri-eyebrow">1 · Your deal vs the market</span>
+          <p className="ri-adjust-big">Your {myLine}.</p>
+          {cmps.length > 0 && (
+            <button type="button" className="ri-link" onClick={() => setOpen(!open)} aria-expanded={open}>
+              {lower.length} lower · {higher.length} higher{even.length ? ` · ${even.length} about even` : ''} {open ? '▴' : '▾'}
+            </button>
+          )}
+          {open && (
+            <ul className="ri-adjust-list">
+              {[...lower, ...even, ...higher].map(({ name, cmp }) => (
+                <li key={name}><b>{name}</b><span className="muted">{cmp.them.veh} · {cmp.them.big}</span><span className={`ri-vs-badge ${cmp.status}`}>{cmp.short}</span></li>
+              ))}
+            </ul>
+          )}
+          <p className="ri-adjust-move"><b>Today's move:</b> {move1}</p>
+        </article>
+        <article className="ri-adjust-card">
+          <span className="ri-eyebrow">2 · Where and when to be heard</span>
+          {best ? (
+            <>
+              <p className="ri-adjust-big">{best.call} played {best.car} car ad{best.car === 1 ? '' : 's'} out of {best.all}.</p>
+              {lanes[1] && <p className="muted small">Next: {lanes[1].call}, {lanes[1].car} of {lanes[1].all}. Counted over the {PERIOD}.</p>}
+              <p className="ri-adjust-move"><b>Today's move:</b> Fewer car ads there means more room for your deal to stand out. Ask your rep about {bestDp ? bestDp[0] : 'open times'} on {best.call}.</p>
+            </>
+          ) : <p className="muted">Not enough ads heard in {mkt} yet. This fills in as the day goes on.</p>}
+        </article>
+        <article className="ri-adjust-card">
+          <span className="ri-eyebrow">3 · What's changing</span>
+          {changes.length ? (
+            <>
+              <ul className="ri-adjust-list">
+                {changes.map((c, i) => <li key={i}><span className="ic" aria-hidden="true">{c.ic}</span><span>{c.text}</span></li>)}
+              </ul>
+              <p className="ri-adjust-move"><b>Today's move:</b> {changes[0].move}</p>
+            </>
+          ) : <p className="muted">No new deals, price changes or deadlines from car dealers in {mkt} this week.</p>}
+        </article>
+      </div>
+      <div className="ri-adjust-foot">
+        <button type="button" className="ri-btn ghost small" onClick={() => goTo('deals')}>See all deals →</button>
+        <span className="muted small">Ideas to try, based only on the ads we heard. We never see your books.</span>
+      </div>
+    </section>
+  );
+}
+
 function TodayView({ events, now, me, watchlist, toggleWatch, onOpen, goTo, market }) {
   const scoped = events.filter((d) => market === 'All' || d.station.market === market);
   if (!me) {
@@ -1193,7 +1301,10 @@ function TodayView({ events, now, me, watchlist, toggleWatch, onOpen, goTo, mark
     );
   }
   const tracked = [me, ...watchlist];
+  const dealer = !!dealOf(me)?.auto;
   return (
+    <>
+    <AdjustToday me={me} events={events} now={now} goTo={goTo} />
     <div className="ri-today">
       <div className="ri-today-a">
         <Scoreboard events={scoped} me={me} now={now} goTo={goTo} />
@@ -1201,13 +1312,14 @@ function TodayView({ events, now, me, watchlist, toggleWatch, onOpen, goTo, mark
       </div>
       <div className="ri-today-b">
         <WhatChanged me={me} watchlist={watchlist} events={scoped} onOpen={onOpen} />
-        <BeatBanner me={me} watchlist={watchlist} toggleWatch={toggleWatch} />
+        {!dealer && <BeatBanner me={me} watchlist={watchlist} toggleWatch={toggleWatch} />}
       </div>
       <div className="ri-today-c">
         <MiniFeed events={scoped} names={tracked} now={now} onOpen={onOpen} title="Live: you and your competitors"
           empty="Nobody you track has aired in the last 3 hours." />
       </div>
     </div>
+    </>
   );
 }
 
